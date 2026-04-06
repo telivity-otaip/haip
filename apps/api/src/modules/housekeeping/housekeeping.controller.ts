@@ -1,44 +1,175 @@
-import { Controller, Get, Post, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { HousekeepingService } from './housekeeping.service';
+import { CreateTaskDto } from './dto/create-task.dto';
+import { UpdateTaskDto } from './dto/update-task.dto';
+import { ListTasksDto } from './dto/list-tasks.dto';
+import { AssignTaskDto } from './dto/assign-task.dto';
+import { AutoAssignDto } from './dto/auto-assign.dto';
+import { CompleteTaskDto } from './dto/complete-task.dto';
+import { InspectTaskDto } from './dto/inspect-task.dto';
 
 @ApiTags('housekeeping')
 @Controller('housekeeping')
 export class HousekeepingController {
   constructor(private readonly housekeepingService: HousekeepingService) {}
 
+  @Get('/dashboard')
+  @ApiOperation({ summary: 'Get housekeeping dashboard' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  @ApiQuery({ name: 'serviceDate', type: String })
+  getDashboard(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('serviceDate') serviceDate: string,
+  ) {
+    return this.housekeepingService.getDashboard(propertyId, serviceDate);
+  }
+
+  @Get('/analytics')
+  @ApiOperation({ summary: 'Get housekeeping analytics' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  @ApiQuery({ name: 'startDate', type: String })
+  @ApiQuery({ name: 'endDate', type: String })
+  getAnalytics(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.housekeepingService.getAnalytics(propertyId, startDate, endDate);
+  }
+
+  @Post('/generate-stayover-tasks')
+  @ApiOperation({ summary: 'Generate stayover tasks for occupied rooms' })
+  generateStayoverTasks(
+    @Body() body: { propertyId: string; serviceDate: string },
+  ) {
+    return this.housekeepingService.generateStayoverTasks(body.propertyId, body.serviceDate);
+  }
+
+  @Post('/auto-assign')
+  @ApiOperation({ summary: 'Auto-assign pending tasks to housekeepers' })
+  autoAssign(@Body() dto: AutoAssignDto) {
+    return this.housekeepingService.autoAssign(dto);
+  }
+
+  @Post('/tasks')
+  @ApiOperation({ summary: 'Create housekeeping task' })
+  @HttpCode(HttpStatus.CREATED)
+  createTask(@Body() dto: CreateTaskDto) {
+    return this.housekeepingService.create(dto);
+  }
+
   @Get('/tasks')
-  @ApiOperation({ summary: 'Get all housekeeping tasks' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  getAllTasks() {
-    return { message: 'Not implemented' };
+  @ApiOperation({ summary: 'List housekeeping tasks' })
+  listTasks(@Query() dto: ListTasksDto) {
+    return this.housekeepingService.list(dto);
   }
 
   @Get('/tasks/:id')
   @ApiOperation({ summary: 'Get housekeeping task by ID' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  getTaskById(@Param('id') id: string) {
-    return { message: 'Not implemented' };
+  @ApiQuery({ name: 'propertyId', type: String })
+  getTaskById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.housekeepingService.findById(id, propertyId);
   }
 
-  @Post('/tasks')
-  @ApiOperation({ summary: 'Create new housekeeping task' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  createTask(@Body() body: any) {
-    return { message: 'Not implemented' };
+  @Patch('/tasks/:id/assign')
+  @ApiOperation({ summary: 'Assign task to housekeeper' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  assignTask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: AssignTaskDto,
+  ) {
+    return this.housekeepingService.assign(id, propertyId, dto);
   }
 
-  @Post('/tasks/:id/assign')
-  @ApiOperation({ summary: 'Assign housekeeping task' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  assignTask(@Param('id') id: string, @Body() body: any) {
-    return { message: 'Not implemented' };
+  @Patch('/tasks/:id/start')
+  @ApiOperation({ summary: 'Start assigned task' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  startTask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.housekeepingService.startTask(id, propertyId);
   }
 
-  @Post('/tasks/:id/complete')
-  @ApiOperation({ summary: 'Mark housekeeping task as complete' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  completeTask(@Param('id') id: string) {
-    return { message: 'Not implemented' };
+  @Patch('/tasks/:id/unassign')
+  @ApiOperation({ summary: 'Unassign task' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  unassignTask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.housekeepingService.unassign(id, propertyId);
+  }
+
+  @Patch('/tasks/:id/complete')
+  @ApiOperation({ summary: 'Complete housekeeping task' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  completeTask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: CompleteTaskDto,
+  ) {
+    return this.housekeepingService.completeTask(id, propertyId, dto);
+  }
+
+  @Patch('/tasks/:id/inspect')
+  @ApiOperation({ summary: 'Inspect completed task' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  inspectTask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: InspectTaskDto,
+  ) {
+    return this.housekeepingService.inspectTask(id, propertyId, dto);
+  }
+
+  @Patch('/tasks/:id/skip')
+  @ApiOperation({ summary: 'Skip housekeeping task' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  skipTask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.housekeepingService.skipTask(id, propertyId, body.reason);
+  }
+
+  @Patch('/tasks/:id')
+  @ApiOperation({ summary: 'Update housekeeping task' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  updateTask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: UpdateTaskDto,
+  ) {
+    return this.housekeepingService.update(id, propertyId, dto);
+  }
+
+  @Delete('/tasks/:id')
+  @ApiOperation({ summary: 'Delete housekeeping task' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteTask(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.housekeepingService.delete(id, propertyId);
   }
 }

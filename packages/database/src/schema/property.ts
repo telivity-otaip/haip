@@ -53,6 +53,7 @@ export const properties = pgTable('properties', {
     lateCheckoutMaxHours?: number;
     depositPercentage?: number;
     depositAuthRequired?: boolean;
+    requireInspection?: boolean;
   }>(),
 
   // Status
