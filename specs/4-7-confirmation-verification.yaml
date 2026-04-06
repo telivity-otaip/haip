@@ -1,0 +1,68 @@
+agent:
+  id: "4.7"
+  name: Hotel Confirmation Verification Agent
+  domain: lodging
+  version: "0.1.0"
+  status: live
+  package: "@otaip/agents-lodging"
+
+description: >
+  Cross-checks hotel booking confirmations between CRS and PMS to detect
+  discrepancies, missing confirmations, and overbooking risk. Escalates
+  unverifiable bookings before check-in.
+
+input:
+  type: ConfirmationVerificationInput
+  fields:
+    - name: confirmation
+      type: HotelConfirmation
+      required: true
+      description: Booking confirmation codes (CRS, channel, PMS if available)
+    - name: booking_source
+      type: string
+      required: true
+      description: Which source the booking was made through
+    - name: check_in
+      type: string
+      required: true
+      description: ISO 8601 check-in date
+    - name: expected_rate
+      type: string
+      required: true
+      description: Booked nightly rate for discrepancy detection
+
+output:
+  type: ConfirmationVerificationOutput
+  fields:
+    - name: status
+      type: "'confirmed' | 'unconfirmed' | 'discrepancy' | 'waitlisted'"
+    - name: pms_confirmation
+      type: string | null
+      description: PMS confirmation code if received (may arrive async after booking)
+    - name: discrepancies
+      type: Discrepancy[]
+      description: Rate, room type, or date mismatches between CRS and PMS
+    - name: escalation_required
+      type: boolean
+      description: True if booking needs human intervention
+    - name: escalation_reason
+      type: string | null
+
+behavior:
+  - Checks if PMS confirmation was received at booking time
+  - Polls for PMS sync status if not received (via hotel API or channel manager)
+  - Cross-checks CRS vs PMS for rate, room type, and date discrepancies
+  - Flags discrepancies for human review
+  - Escalates immediately if PMS shows waitlist or tentative status
+  - Verification timing recommended at 24-48 hours post-booking and 24 hours pre-check-in
+  - Best-effort for properties without API access (independent hotels)
+  - Walking/overbooking detection via PMS status signals
+
+errors:
+  - AgentNotInitializedError: Called before initialize()
+  - AgentInputValidationError: Missing confirmation codes or check-in date
+  - AgentDataUnavailableError: Cannot reach PMS or channel manager for verification
+
+pipeline:
+  upstream: Agent 4.5 (Hotel Booking)
+  downstream: none (terminal for verification flow, escalates to human if needed)

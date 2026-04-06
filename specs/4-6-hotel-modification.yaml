@@ -1,0 +1,64 @@
+agent:
+  id: "4.6"
+  name: Hotel Modification & Cancellation Agent
+  domain: lodging
+  version: "0.1.0"
+  status: live
+  package: "@otaip/agents-lodging"
+
+description: >
+  Handles hotel booking modifications and cancellations. Classifies changes as
+  free modifications vs cancel/rebook operations. Calculates cancellation penalties
+  against the booked rate with deadline and stepped penalty awareness.
+
+input:
+  type: HotelModificationInput
+  fields:
+    - name: booking_reference
+      type: HotelConfirmation
+      required: true
+      description: All confirmation codes from the original booking
+    - name: action
+      type: "'modify' | 'cancel'"
+      required: true
+    - name: changes
+      type: BookingChanges
+      required: false
+      description: What to change (dates, room type, guest name, etc.)
+
+output:
+  type: HotelModificationOutput
+  fields:
+    - name: result
+      type: "'modified' | 'cancelled' | 'requires_rebook' | 'denied'"
+    - name: updated_confirmation
+      type: HotelConfirmation | null
+      description: New confirmation if rebooked, null if cancelled
+    - name: penalty
+      type: PenaltyDetails | null
+      description: Cancellation penalty amount and calculation basis
+    - name: refund
+      type: RefundDetails | null
+      description: Refund amount and expected timeline
+    - name: cost_difference
+      type: string | null
+      description: Price difference for rebooking (string-based decimal)
+
+behavior:
+  - "Free modifications (no cancel/rebook): guest name, bed type, smoking preference, special requests, accessibility, guest count, add/remove amenities"
+  - "Cancel/rebook required: date changes, room type changes, property changes"
+  - Cancellation penalty calculated against BOOKED rate (not current rate)
+  - Stepped penalty awareness (penalty increases closer to arrival)
+  - California 24-hour rule (free cancellation within 24 hours of booking regardless of policy)
+  - Non-refundable bookings cancel with full charge (except California 24hr)
+  - Date changes quote new booking first, then cancel old + book new
+  - Always checks deadline before any action
+
+errors:
+  - AgentNotInitializedError: Called before initialize()
+  - AgentInputValidationError: Missing booking reference, action without required fields
+  - AgentDataUnavailableError: Cannot reach booking source to verify current status
+
+pipeline:
+  upstream: Agent 4.5 (Hotel Booking)
+  downstream: none (terminal for modification flow)

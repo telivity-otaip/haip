@@ -1,0 +1,64 @@
+agent:
+  id: "4.3"
+  name: Hotel Content Normalization Agent
+  domain: lodging
+  version: "0.1.0"
+  status: live
+  package: "@otaip/agents-lodging"
+
+description: >
+  Normalizes hotel content (room types, amenities, photos, descriptions) from
+  heterogeneous sources into a standardized OTAIP taxonomy. Handles chain-specific
+  naming patterns, multi-language content, and photo quality scoring.
+
+input:
+  type: ContentNormalizationInput
+  fields:
+    - name: property
+      type: CanonicalProperty
+      required: true
+      description: Deduplicated property record from Agent 4.2
+    - name: raw_rooms
+      type: RawRoomDescription[]
+      required: true
+      description: Room descriptions from all contributing sources
+    - name: raw_amenities
+      type: RawAmenity[]
+      required: false
+      description: Amenity lists from all contributing sources
+    - name: photos
+      type: RawPhoto[]
+      required: false
+      description: Photos with metadata from all sources
+
+output:
+  type: ContentNormalizationOutput
+  fields:
+    - name: normalized_rooms
+      type: NormalizedRoom[]
+      description: Rooms mapped to OTAIP taxonomy (bed type, category, view, accessibility)
+    - name: normalized_amenities
+      type: NormalizedAmenity[]
+      description: Amenities mapped to standard categories with detail
+    - name: scored_photos
+      type: ScoredPhoto[]
+      description: Photos ranked by quality and categorized (exterior, room, pool, etc.)
+    - name: normalized_description
+      type: string
+      description: Cleaned property description
+
+behavior:
+  - Room taxonomy maps GDS codes (SGL, DBL, TWIN, STE) and free-text to OTAIP types
+  - Extracts bed type, bed count, room category, view type, accessibility from raw descriptions
+  - Handles chain-specific patterns (Marriott, Hilton, IHG naming conventions)
+  - Amenity normalization to 11 categories with boolean + detail
+  - Photo quality scoring based on resolution, aspect ratio, and content classification
+  - Multi-language support (local + English)
+
+errors:
+  - AgentNotInitializedError: Called before initialize()
+  - AgentInputValidationError: Missing property or empty rooms array
+
+pipeline:
+  upstream: Agent 4.2 (Property Deduplication)
+  downstream: Agent 4.4 (Rate Comparison), display layer

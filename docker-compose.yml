@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # PostgreSQL — multi-tenant from day one
+  postgres:
+    image: postgres:16-alpine
+    container_name: haip-postgres
+    environment:
+      POSTGRES_USER: haip
+      POSTGRES_PASSWORD: haip
+      POSTGRES_DB: haip
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U haip']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis — session cache, rate caching, pub/sub for events, BullMQ
+  redis:
+    image: redis:7-alpine
+    container_name: haip-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # HAIP API
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: haip-api
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
+      REDIS_URL: redis://redis:6379
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # For local dev, mount source and use watch mode
+    # volumes:
+    #   - ./apps/api/src:/app/apps/api/src
+
+volumes:
+  postgres-data:
+  redis-data:

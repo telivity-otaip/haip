@@ -1,0 +1,65 @@
+agent:
+  id: "4.2"
+  name: Property Deduplication Agent
+  domain: lodging
+  version: "0.1.0"
+  status: live
+  package: "@otaip/agents-lodging"
+
+description: >
+  Identifies duplicate hotel properties across multiple sources and merges them
+  into canonical records. Uses a multi-algorithm scoring pipeline with configurable
+  thresholds and Union-Find grouping for transitive matches.
+
+input:
+  type: PropertyDeduplicationInput
+  fields:
+    - name: properties
+      type: RawHotelResult[]
+      required: true
+      description: Raw hotel results from multiple sources (output of Agent 4.1)
+    - name: thresholds
+      type: DeduplicationThresholds
+      required: false
+      description: Override default merge/review/separate thresholds
+    - name: source_trust_hierarchy
+      type: string[]
+      required: false
+      description: Ordered list of sources by trust level for content merge decisions
+
+output:
+  type: PropertyDeduplicationOutput
+  fields:
+    - name: canonical_properties
+      type: CanonicalProperty[]
+      description: Deduplicated properties with merged content
+    - name: merge_log
+      type: MergeRecord[]
+      description: Which source records were merged and why (confidence + reasoning)
+    - name: flagged_for_review
+      type: PropertyPair[]
+      description: Pairs scoring between review and auto-merge thresholds
+    - name: total_input
+      type: number
+    - name: total_output
+      type: number
+    - name: dedup_ratio
+      type: number
+      description: Reduction percentage (e.g., 0.4 means 40% were duplicates)
+
+behavior:
+  - "Pipeline: Normalize → Block → Score → Threshold → Merge"
+  - "Scoring algorithms: Jaro-Winkler (name, 0.3), Levenshtein (address, 0.2), Haversine (coordinates, 0.25), chain code (0.15), star rating (0.1)"
+  - "Thresholds: >0.85 auto-merge, 0.65-0.85 flag for review, <0.65 separate"
+  - Blocking by city + chain code to reduce O(n²) comparisons
+  - Union-Find grouping for transitive matches (A matches B, B matches C → A,B,C merge)
+  - Content merge uses source trust hierarchy for per-field best-content selection
+  - Explainable — every merge includes confidence score and algorithm breakdown
+
+errors:
+  - AgentNotInitializedError: Called before initialize()
+  - AgentInputValidationError: Empty properties array
+
+pipeline:
+  upstream: Agent 4.1 (Hotel Search Aggregator)
+  downstream: Agent 4.3 (Content Normalization), Agent 4.4 (Rate Comparison)

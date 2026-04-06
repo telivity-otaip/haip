@@ -1,0 +1,72 @@
+agent:
+  id: "4.5"
+  name: Hotel Booking Agent
+  domain: lodging
+  version: "0.1.0"
+  status: live
+  package: "@otaip/agents-lodging"
+
+description: >
+  Executes hotel bookings with three-layer confirmation code tracking (CRS, PMS, channel),
+  payment routing for prepaid/pay-at-property/virtual card, and dual folio setup for VCN bookings.
+
+input:
+  type: HotelBookingInput
+  fields:
+    - name: property_id
+      type: string
+      required: true
+      description: Canonical property ID from deduplication
+    - name: room
+      type: NormalizedRoom
+      required: true
+      description: Selected room from content normalization
+    - name: rate
+      type: RankedRate
+      required: true
+      description: Selected rate from rate comparison
+    - name: guest
+      type: GuestDetails
+      required: true
+      description: Name, contact, loyalty program details
+    - name: payment
+      type: PaymentMethod
+      required: true
+      description: Prepaid, pay-at-property, or virtual card configuration
+    - name: source
+      type: string
+      required: true
+      description: Which adapter/source to book through
+
+output:
+  type: HotelBookingOutput
+  fields:
+    - name: confirmation
+      type: HotelConfirmation
+      description: All three confirmation codes (CRS, PMS, channel)
+    - name: payment_status
+      type: PaymentStatus
+      description: Charged, guaranteed, or pending
+    - name: cancellation_policy
+      type: CancellationPolicy
+      description: Full policy with deadline and penalty structure
+    - name: cancellation_deadline
+      type: string
+      description: ISO 8601 datetime of free cancellation cutoff
+
+behavior:
+  - Rate re-verification before booking (price may have changed since search)
+  - Three-layer confirmation tracking (CRS, PMS, channel — PMS may arrive async)
+  - Payment routing per method type
+  - Virtual card dual folio setup (Folio 1 for room/tax/resort fees via VCN, Folio 2 for guest incidentals)
+  - Graceful failure handling with retry on alternate source if primary fails
+  - Booking record stored for downstream agents (modification, verification)
+
+errors:
+  - AgentNotInitializedError: Called before initialize()
+  - AgentInputValidationError: Missing required fields
+  - AgentDataUnavailableError: Booking source unreachable or rate no longer available
+
+pipeline:
+  upstream: Agent 4.4 (Rate Comparison)
+  downstream: Agent 4.6 (Modification), Agent 4.7 (Verification)

@@ -1,0 +1,67 @@
+agent:
+  id: "4.4"
+  name: Hotel Rate Comparison Agent
+  domain: lodging
+  version: "0.1.0"
+  status: live
+  package: "@otaip/agents-lodging"
+
+description: >
+  Compares hotel rates across sources with total cost calculation including
+  mandatory fees, tax breakdown, and cancellation policy comparison.
+  Uses string-based decimal arithmetic to avoid floating point errors.
+  Detects rate parity violations across channels.
+
+input:
+  type: RateComparisonInput
+  fields:
+    - name: property
+      type: CanonicalProperty
+      required: true
+      description: Deduplicated property with source attribution
+    - name: rates
+      type: SourceRate[]
+      required: true
+      description: Rate details per source (base, taxes, fees, cancellation terms)
+    - name: currency
+      type: string
+      required: false
+      default: "USD"
+      description: Target currency for comparison (ISO 4217)
+    - name: nights
+      type: number
+      required: true
+      description: Number of nights for total cost calculation
+
+output:
+  type: RateComparisonOutput
+  fields:
+    - name: best_rate
+      type: RankedRate
+      description: Lowest total cost option
+    - name: rates_by_type
+      type: Record<RateType, RankedRate[]>
+      description: Best rate per rate type (BAR, corporate, consortium, etc.)
+    - name: parity_violations
+      type: ParityViolation[]
+      description: Same room showing different prices across sources
+    - name: total_breakdown
+      type: CostBreakdown
+      description: Base, taxes, mandatory fees, optional fees separated
+
+behavior:
+  - String-based decimal arithmetic for all price calculations (no floating point)
+  - Mandatory fees (resort, facility, destination) always included in total
+  - Rate type classification (BAR, corporate, consortium, government, AAA, opaque, package)
+  - Rate fencing awareness (refundable vs non-refundable, advance purchase, member-only)
+  - Currency normalization for international properties
+  - Rate freshness tracking (how old is the quoted rate)
+  - Parity detection flags same room at different prices across sources
+
+errors:
+  - AgentNotInitializedError: Called before initialize()
+  - AgentInputValidationError: Empty rates, nights < 1
+
+pipeline:
+  upstream: Agent 4.2 (Property Deduplication), Agent 4.3 (Content Normalization)
+  downstream: Agent 4.5 (Hotel Booking)

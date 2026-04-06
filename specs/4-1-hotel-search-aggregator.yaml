@@ -1,0 +1,79 @@
+agent:
+  id: "4.1"
+  name: Hotel Search Aggregator
+  domain: lodging
+  version: "0.1.0"
+  status: live
+  package: "@otaip/agents-lodging"
+
+description: >
+  Parallel multi-source hotel availability search with configurable timeouts
+  and partial result support. Fans out to registered adapters, collects results,
+  and returns raw (non-deduplicated) hotel data with per-source metadata.
+  Deduplication is Agent 4.2's responsibility.
+
+input:
+  type: HotelSearchInput
+  fields:
+    - name: location
+      type: string
+      required: true
+      description: City name, airport code, or coordinates
+    - name: check_in
+      type: string
+      required: true
+      description: ISO 8601 date
+    - name: check_out
+      type: string
+      required: true
+      description: ISO 8601 date
+    - name: guests
+      type: number
+      required: true
+      description: Number of guests (minimum 1)
+    - name: rooms
+      type: number
+      required: false
+      default: 1
+      description: Number of rooms
+    - name: currency
+      type: string
+      required: false
+      default: "USD"
+      description: ISO 4217 currency code
+    - name: timeout_ms
+      type: number
+      required: false
+      default: 10000
+      description: Per-source timeout in milliseconds
+
+output:
+  type: HotelSearchOutput
+  fields:
+    - name: results
+      type: RawHotelResult[]
+      description: Raw results from all sources, not deduplicated
+    - name: sources_queried
+      type: string[]
+      description: List of adapter sources that were called
+    - name: sources_failed
+      type: string[]
+      description: Sources that timed out or errored
+    - name: total_results
+      type: number
+
+behavior:
+  - Uses Promise.allSettled for parallel adapter fan-out
+  - Returns partial results if some sources timeout or fail
+  - Failed sources appear in sources_failed and as warnings, not thrown errors
+  - Does NOT deduplicate — downstream Agent 4.2 handles this
+  - Rate limiting is per-adapter responsibility
+
+errors:
+  - AgentNotInitializedError: No adapters registered
+  - AgentInputValidationError: Missing required fields, invalid dates, guests < 1
+  - AgentDataUnavailableError: ALL sources failed (zero results from any source)
+
+pipeline:
+  upstream: none (entry point)
+  downstream: Agent 4.2 (Property Deduplication)
