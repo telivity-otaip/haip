@@ -25,6 +25,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Build packages
+        run: pnpm -r --filter @haip/shared --filter @haip/database run build
+
       - name: Lint
         run: pnpm lint
 
