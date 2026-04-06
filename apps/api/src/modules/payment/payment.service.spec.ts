@@ -1,0 +1,368 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
+import { PaymentService } from './payment.service';
+import { FolioService } from '../folio/folio.service';
+import { WebhookService } from '../webhook/webhook.service';
+import { DRIZZLE } from '../../database/database.module';
+import { PAYMENT_GATEWAY } from './interfaces/payment-gateway.interface';
+
+const mockFolio = {
+  id: 'folio-001',
+  propertyId: 'prop-001',
+  status: 'open',
+  balance: '150.00',
+};
+
+const mockPayment = {
+  id: 'pay-001',
+  propertyId: 'prop-001',
+  folioId: 'folio-001',
+  method: 'cash',
+  status: 'captured',
+  amount: '150.00',
+  currencyCode: 'USD',
+  gatewayTransactionId: 'mock-auth-123',
+  processedAt: new Date(),
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+function createMockDb(returnData: any[] = [mockPayment]) {
+  const selectChain = () => ({
+    from: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          offset: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockResolvedValue(returnData),
+          }),
+        }),
+        then: (resolve: any) => resolve(returnData),
+      }),
+    }),
+  });
+
+  const mutateChain = () => ({
+    values: vi.fn().mockReturnValue({
+      returning: vi.fn().mockResolvedValue(returnData),
+    }),
+    set: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue(returnData),
+      }),
+    }),
+    where: vi.fn().mockReturnValue({
+      returning: vi.fn().mockResolvedValue(returnData),
+    }),
+  });
+
+  return {
+    select: vi.fn().mockImplementation(selectChain),
+    insert: vi.fn().mockReturnValue(mutateChain()),
+    update: vi.fn().mockReturnValue(mutateChain()),
+    delete: vi.fn().mockReturnValue(mutateChain()),
+  };
+}
+
+const mockFolioService = {
+  findById: vi.fn().mockResolvedValue(mockFolio),
+  recalculateBalance: vi.fn(),
+};
+
+const mockGateway = {
+  authorize: vi.fn().mockResolvedValue({ success: true, transactionId: 'mock-auth-123' }),
+  capture: vi.fn().mockResolvedValue({ success: true, transactionId: 'mock-cap-123' }),
+  void: vi.fn().mockResolvedValue({ success: true, transactionId: 'mock-void-123' }),
+  refund: vi.fn().mockResolvedValue({ success: true, transactionId: 'mock-ref-123' }),
+};
+
+const mockWebhookService = { emit: vi.fn() };
+
+describe('PaymentService', () => {
+  let service: PaymentService;
+  let mockDb: ReturnType<typeof createMockDb>;
+
+  beforeEach(async () => {
+    mockDb = createMockDb();
+    vi.clearAllMocks();
+    mockFolioService.findById.mockResolvedValue(mockFolio);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PaymentService,
+        { provide: DRIZZLE, useValue: mockDb },
+        { provide: FolioService, useValue: mockFolioService },
+        { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+        { provide: WebhookService, useValue: mockWebhookService },
+      ],
+    }).compile();
+
+    service = module.get<PaymentService>(PaymentService);
+  });
+
+  describe('recordPayment', () => {
+    it('should record cash payment with status captured and recalculate balance', async () => {
+      const result = await service.recordPayment({
+        folioId: 'folio-001',
+        propertyId: 'prop-001',
+        method: 'cash',
+        amount: '150.00',
+        currencyCode: 'USD',
+      });
+
+      expect(result).toEqual(mockPayment);
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalledWith('folio-001', 'prop-001');
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'payment.received',
+        'payment',
+        mockPayment.id,
+        expect.objectContaining({ status: 'captured' }),
+        'prop-001',
+      );
+    });
+
+    it('should reject credit_card method', async () => {
+      await expect(
+        service.recordPayment({
+          folioId: 'folio-001',
+          propertyId: 'prop-001',
+          method: 'credit_card',
+          amount: '150.00',
+          currencyCode: 'USD',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('authorizePayment', () => {
+    it('should call gateway and create authorized payment', async () => {
+      const authPayment = { ...mockPayment, status: 'authorized', isPreAuthorization: true };
+      const db = createMockDb([authPayment]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<PaymentService>(PaymentService);
+
+      const result = await svc.authorizePayment({
+        folioId: 'folio-001',
+        propertyId: 'prop-001',
+        amount: '500.00',
+        currencyCode: 'USD',
+        gatewayProvider: 'stripe',
+        gatewayPaymentToken: 'tok_test_123',
+      });
+
+      expect(mockGateway.authorize).toHaveBeenCalledWith('tok_test_123', 500, 'USD');
+      expect(result.status).toBe('authorized');
+      // Pre-auth does NOT recalculate balance
+      expect(mockFolioService.recalculateBalance).not.toHaveBeenCalled();
+    });
+
+    it('should handle gateway failure', async () => {
+      const failedGateway = {
+        ...mockGateway,
+        authorize: vi.fn().mockResolvedValue({
+          success: false,
+          transactionId: 'failed-123',
+          errorMessage: 'Insufficient funds',
+        }),
+      };
+      const failedPayment = { ...mockPayment, status: 'failed' };
+      const db = createMockDb([failedPayment]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: failedGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<PaymentService>(PaymentService);
+
+      await expect(
+        svc.authorizePayment({
+          folioId: 'folio-001',
+          propertyId: 'prop-001',
+          amount: '500.00',
+          currencyCode: 'USD',
+          gatewayProvider: 'stripe',
+          gatewayPaymentToken: 'tok_test_123',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'payment.failed',
+        'payment',
+        failedPayment.id,
+        expect.objectContaining({ error: 'Insufficient funds' }),
+        'prop-001',
+      );
+    });
+  });
+
+  describe('capturePayment', () => {
+    it('should capture authorized payment and recalculate balance', async () => {
+      const authorizedPayment = { ...mockPayment, status: 'authorized' };
+      const capturedPayment = { ...mockPayment, status: 'captured' };
+      let selectCallCount = 0;
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => {
+                selectCallCount++;
+                resolve(selectCallCount === 1 ? [authorizedPayment] : []);
+              },
+            }),
+          }),
+        })),
+        insert: vi.fn(),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([capturedPayment]),
+            }),
+          }),
+        }),
+        delete: vi.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<PaymentService>(PaymentService);
+
+      const result = await svc.capturePayment('pay-001', 'prop-001');
+      expect(result.status).toBe('captured');
+      expect(mockGateway.capture).toHaveBeenCalled();
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalled();
+    });
+
+    it('should reject capture of non-authorized payment', async () => {
+      const capturedPayment = { ...mockPayment, status: 'captured' };
+      const db = createMockDb([capturedPayment]);
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<PaymentService>(PaymentService);
+
+      await expect(svc.capturePayment('pay-001', 'prop-001')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('voidPayment', () => {
+    it('should void an authorized payment', async () => {
+      const authorizedPayment = { ...mockPayment, status: 'authorized' };
+      const voidedPayment = { ...mockPayment, status: 'voided' };
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => resolve([authorizedPayment]),
+            }),
+          }),
+        })),
+        insert: vi.fn(),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([voidedPayment]),
+            }),
+          }),
+        }),
+        delete: vi.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<PaymentService>(PaymentService);
+
+      const result = await svc.voidPayment('pay-001', 'prop-001');
+      expect(result.status).toBe('voided');
+      expect(mockGateway.void).toHaveBeenCalled();
+    });
+  });
+
+  describe('refundPayment', () => {
+    it('should create refund record and update original payment', async () => {
+      const capturedPayment = { ...mockPayment, status: 'captured' };
+      const refundPayment = { ...mockPayment, id: 'pay-002', amount: '-150.00', originalPaymentId: 'pay-001' };
+      let selectCallCount = 0;
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => {
+                selectCallCount++;
+                resolve(selectCallCount === 1 ? [capturedPayment] : []);
+              },
+            }),
+          }),
+        })),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([refundPayment]),
+          }),
+        }),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([{ ...capturedPayment, status: 'refunded' }]),
+            }),
+          }),
+        }),
+        delete: vi.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PaymentService,
+          { provide: DRIZZLE, useValue: db },
+          { provide: FolioService, useValue: mockFolioService },
+          { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+          { provide: WebhookService, useValue: mockWebhookService },
+        ],
+      }).compile();
+      const svc = module.get<PaymentService>(PaymentService);
+
+      const result = await svc.refundPayment('pay-001', 'prop-001');
+      expect(mockGateway.refund).toHaveBeenCalled();
+      expect(mockFolioService.recalculateBalance).toHaveBeenCalled();
+      expect(mockWebhookService.emit).toHaveBeenCalledWith(
+        'payment.refunded',
+        'payment',
+        refundPayment.id,
+        expect.any(Object),
+        'prop-001',
+      );
+      expect(result).toEqual(refundPayment);
+    });
+  });
+});

@@ -1,6 +1,17 @@
-import { Controller, Post, Get, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { PaymentService } from './payment.service';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
+import { ListPaymentsDto } from './dto/list-payments.dto';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -8,16 +19,69 @@ export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Process payment' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  processPayment(@Body() body: any) {
-    return { message: 'Not implemented' };
+  @ApiOperation({ summary: 'Record payment (cash, bank transfer, etc.)' })
+  @ApiResponse({ status: 201, description: 'Payment recorded' })
+  recordPayment(@Body() dto: CreatePaymentDto) {
+    return this.paymentService.recordPayment(dto);
+  }
+
+  @Post('authorize')
+  @ApiOperation({ summary: 'Authorize card payment (pre-auth)' })
+  @ApiResponse({ status: 201, description: 'Payment authorized' })
+  authorizePayment(@Body() dto: AuthorizePaymentDto) {
+    return this.paymentService.authorizePayment(dto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'List payments with filters' })
+  @ApiResponse({ status: 200, description: 'Paginated list of payments' })
+  listPayments(@Query() dto: ListPaymentsDto) {
+    return this.paymentService.list(dto);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get payment by ID' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  getPaymentById(@Param('id') id: string) {
-    return { message: 'Not implemented' };
+  @ApiResponse({ status: 200, description: 'Payment found' })
+  @ApiResponse({ status: 404, description: 'Payment not found' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  getPaymentById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.paymentService.findById(id, propertyId);
+  }
+
+  @Post(':id/capture')
+  @ApiOperation({ summary: 'Capture authorized payment' })
+  @ApiResponse({ status: 200, description: 'Payment captured' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  capturePayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.paymentService.capturePayment(id, propertyId);
+  }
+
+  @Post(':id/void')
+  @ApiOperation({ summary: 'Void authorized payment' })
+  @ApiResponse({ status: 200, description: 'Payment voided' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  voidPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.paymentService.voidPayment(id, propertyId);
+  }
+
+  @Post(':id/refund')
+  @ApiOperation({ summary: 'Refund captured payment' })
+  @ApiResponse({ status: 200, description: 'Payment refunded' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  refundPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() body: { amount?: string },
+  ) {
+    return this.paymentService.refundPayment(id, propertyId, body.amount);
   }
 }

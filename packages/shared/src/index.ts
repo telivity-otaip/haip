@@ -14,6 +14,7 @@ export const WEBHOOK_EVENTS = {
   'reservation.no_show': 'reservation.no_show',
 
   // Folio events
+  'folio.created': 'folio.created',
   'folio.charge_posted': 'folio.charge_posted',
   'folio.settled': 'folio.settled',
 

@@ -3,12 +3,14 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  forwardRef,
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import { reservations, bookings, guests, rooms, roomTypes, ratePlans } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { assertTransition, type ReservationStatus } from './reservation-state-machine';
 import { AvailabilityService } from './availability.service';
+import { FolioService } from '../folio/folio.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { ModifyReservationDto } from './dto/modify-reservation.dto';
 import { AssignRoomDto } from './dto/assign-room.dto';
@@ -21,6 +23,7 @@ export class ReservationService {
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly availabilityService: AvailabilityService,
+    @Inject(forwardRef(() => FolioService)) private readonly folioService: FolioService,
   ) {}
 
   async create(dto: CreateReservationDto) {
@@ -180,6 +183,10 @@ export class ReservationService {
       })
       .where(eq(reservations.id, id))
       .returning();
+
+    // Auto-create guest folio on check-in
+    await this.folioService.createAutoFolio(updated);
+
     return updated;
   }
 

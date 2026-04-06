@@ -1,37 +1,158 @@
-import { Controller, Get, Post, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { FolioService } from './folio.service';
+import { FolioRoutingService } from './folio-routing.service';
+import { CreateFolioDto } from './dto/create-folio.dto';
+import { UpdateFolioDto } from './dto/update-folio.dto';
+import { ListFoliosDto } from './dto/list-folios.dto';
+import { TransferChargeDto } from './dto/transfer-charge.dto';
+import { TransferCityLedgerDto } from './dto/transfer-city-ledger.dto';
+import { CreateChargeDto } from './dto/create-charge.dto';
+import { ListChargesDto } from './dto/list-charges.dto';
 
 @ApiTags('folios')
 @Controller('folios')
 export class FolioController {
-  constructor(private readonly folioService: FolioService) {}
+  constructor(
+    private readonly folioService: FolioService,
+    private readonly folioRoutingService: FolioRoutingService,
+  ) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Create a folio' })
+  @ApiResponse({ status: 201, description: 'Folio created' })
+  createFolio(@Body() dto: CreateFolioDto) {
+    return this.folioService.create(dto);
+  }
 
   @Get()
-  @ApiOperation({ summary: 'Get all folios' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  getAllFolios() {
-    return { message: 'Not implemented' };
+  @ApiOperation({ summary: 'List folios with filters' })
+  @ApiResponse({ status: 200, description: 'Paginated list of folios' })
+  listFolios(@Query() dto: ListFoliosDto) {
+    return this.folioService.list(dto);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get folio by ID' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  getFolioById(@Param('id') id: string) {
-    return { message: 'Not implemented' };
+  @ApiResponse({ status: 200, description: 'Folio found' })
+  @ApiResponse({ status: 404, description: 'Folio not found' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  getFolioById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.folioService.findById(id, propertyId);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update folio' })
+  @ApiResponse({ status: 200, description: 'Folio updated' })
+  @ApiResponse({ status: 404, description: 'Folio not found' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  updateFolio(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: UpdateFolioDto,
+  ) {
+    return this.folioService.update(id, propertyId, dto);
+  }
+
+  @Patch(':id/settle')
+  @ApiOperation({ summary: 'Settle folio (balance must be zero)' })
+  @ApiResponse({ status: 200, description: 'Folio settled' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  settleFolio(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.folioService.settle(id, propertyId);
+  }
+
+  @Patch(':id/close')
+  @ApiOperation({ summary: 'Close folio (must be settled first)' })
+  @ApiResponse({ status: 200, description: 'Folio closed' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  closeFolio(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.folioService.close(id, propertyId);
   }
 
   @Post(':id/charges')
-  @ApiOperation({ summary: 'Add charge to folio' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  addChargeToFolio(@Param('id') id: string, @Body() body: any) {
-    return { message: 'Not implemented' };
+  @ApiOperation({ summary: 'Post charge to folio' })
+  @ApiResponse({ status: 201, description: 'Charge posted' })
+  postCharge(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateChargeDto,
+  ) {
+    return this.folioService.postCharge(id, dto);
   }
 
   @Get(':id/charges')
-  @ApiOperation({ summary: 'Get folio charges' })
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  getFolioCharges(@Param('id') id: string) {
-    return { message: 'Not implemented' };
+  @ApiOperation({ summary: 'List charges on folio' })
+  @ApiResponse({ status: 200, description: 'Paginated list of charges' })
+  getCharges(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() dto: ListChargesDto,
+  ) {
+    return this.folioService.getCharges(id, dto);
+  }
+
+  @Post(':id/charges/:chargeId/reverse')
+  @ApiOperation({ summary: 'Reverse a charge' })
+  @ApiResponse({ status: 200, description: 'Charge reversed' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  reverseCharge(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('chargeId', ParseUUIDPipe) chargeId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.folioService.reverseCharge(id, chargeId, propertyId);
+  }
+
+  @Post(':id/charges/lock')
+  @ApiOperation({ summary: 'Lock charges up to audit date' })
+  @ApiResponse({ status: 200, description: 'Charges locked' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  lockCharges(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() body: { auditDate: string },
+  ) {
+    return this.folioService.lockCharges(id, propertyId, new Date(body.auditDate));
+  }
+
+  @Post(':id/transfer-charge')
+  @ApiOperation({ summary: 'Transfer charge to another folio' })
+  @ApiResponse({ status: 200, description: 'Charge transferred' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  transferCharge(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: TransferChargeDto,
+  ) {
+    return this.folioService.transferCharge(id, propertyId, dto);
+  }
+
+  @Post(':id/transfer-to-city-ledger')
+  @ApiOperation({ summary: 'Transfer outstanding balance to city ledger' })
+  @ApiResponse({ status: 200, description: 'Balance transferred to city ledger' })
+  @ApiQuery({ name: 'propertyId', type: String })
+  transferToCityLedger(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: TransferCityLedgerDto,
+  ) {
+    return this.folioRoutingService.transferToCityLedger(id, propertyId, dto);
   }
 }
