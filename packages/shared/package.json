@@ -18,7 +18,7 @@
     "clean": "rm -rf dist",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
