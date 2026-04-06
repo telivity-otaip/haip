@@ -45,6 +45,16 @@ export const properties = pgTable('properties', {
   overbookingPercentage: integer('overbooking_percentage').notNull().default(0), // 0-15% typical
   nightAuditTime: varchar('night_audit_time', { length: 5 }).notNull().default('02:00'),
 
+  // Property settings (flexible JSONB for operational config)
+  settings: jsonb('settings').$type<{
+    earlyCheckInFee?: number;
+    lateCheckoutFee?: number;
+    earlyCheckInMinHours?: number;
+    lateCheckoutMaxHours?: number;
+    depositPercentage?: number;
+    depositAuthRequired?: boolean;
+  }>(),
+
   // Status
   isActive: boolean('is_active').notNull().default(true),
 

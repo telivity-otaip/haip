@@ -8,7 +8,7 @@ import {
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ReservationService } from './reservation.service';
 import { AvailabilityService } from './availability.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
@@ -17,6 +17,9 @@ import { AssignRoomDto } from './dto/assign-room.dto';
 import { CancelReservationDto } from './dto/cancel-reservation.dto';
 import { SearchAvailabilityDto } from './dto/search-availability.dto';
 import { ListReservationsDto } from './dto/list-reservations.dto';
+import { CheckInDto } from './dto/check-in.dto';
+import { CheckOutDto } from './dto/check-out.dto';
+import { GroupCheckInDto } from './dto/group-check-in.dto';
 
 @ApiTags('reservations')
 @Controller('reservations')
@@ -38,6 +41,17 @@ export class ReservationController {
       dto.checkOut,
       dto.roomTypeId,
     );
+  }
+
+  @Post('group-check-in')
+  @ApiOperation({ summary: 'Batch check-in for group reservations' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiResponse({ status: 200, description: 'Group check-in results (partial success allowed)' })
+  groupCheckIn(
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: GroupCheckInDto,
+  ) {
+    return this.reservationService.groupCheckIn(propertyId, dto);
   }
 
   // --- CRUD routes ---
@@ -112,16 +126,29 @@ export class ReservationController {
   }
 
   @Patch(':id/check-in')
-  @ApiOperation({ summary: 'Check in reservation' })
+  @ApiOperation({ summary: 'Check in reservation with optional ID capture, deposit auth, room override' })
   @ApiResponse({ status: 200, description: 'Guest checked in' })
-  checkIn(@Param('id', ParseUUIDPipe) id: string) {
-    return this.reservationService.checkIn(id);
+  checkIn(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CheckInDto,
+  ) {
+    return this.reservationService.checkIn(id, dto);
   }
 
   @Patch(':id/check-out')
-  @ApiOperation({ summary: 'Check out reservation' })
+  @ApiOperation({ summary: 'Check out reservation with optional express checkout and late fee' })
   @ApiResponse({ status: 200, description: 'Guest checked out' })
-  checkOut(@Param('id', ParseUUIDPipe) id: string) {
-    return this.reservationService.checkOut(id);
+  checkOut(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CheckOutDto,
+  ) {
+    return this.reservationService.checkOut(id, dto);
+  }
+
+  @Post(':id/express-checkout')
+  @ApiOperation({ summary: 'Express checkout — auto-capture deposits and settle' })
+  @ApiResponse({ status: 200, description: 'Express checkout completed' })
+  expressCheckOut(@Param('id', ParseUUIDPipe) id: string) {
+    return this.reservationService.expressCheckOut(id);
   }
 }
