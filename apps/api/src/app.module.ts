@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { PropertyModule } from './modules/property/property.module';
@@ -10,6 +11,7 @@ import { FolioModule } from './modules/folio/folio.module';
 import { RatePlanModule } from './modules/rate-plan/rate-plan.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
+import { WebhookModule } from './modules/webhook/webhook.module';
 
 @Module({
   imports: [
@@ -17,6 +19,7 @@ import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
+    EventEmitterModule.forRoot(),
     DatabaseModule,
     HealthModule,
     PropertyModule,
@@ -27,6 +30,7 @@ import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
     RatePlanModule,
     PaymentModule,
     HousekeepingModule,
+    WebhookModule,
   ],
 })
 export class AppModule {}
