@@ -44,6 +44,9 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://haip:haip@postgres:5432/haip
       REDIS_URL: redis://redis:6379
+      STRIPE_MODE: mock
+      # STRIPE_SECRET_KEY:
+      # STRIPE_WEBHOOK_SECRET:
     ports:
       - '3000:3000'
     depends_on:
