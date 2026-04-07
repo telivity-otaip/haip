@@ -54,6 +54,10 @@ export const properties = pgTable('properties', {
     depositPercentage?: number;
     depositAuthRequired?: boolean;
     requireInspection?: boolean;
+    taxRate?: number;
+    noShowFeeAmount?: number;
+    noShowCutoffHour?: number;
+    auditAutoLock?: boolean;
   }>(),
 
   // Status

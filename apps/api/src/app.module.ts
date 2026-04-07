@@ -11,6 +11,8 @@ import { FolioModule } from './modules/folio/folio.module';
 import { RatePlanModule } from './modules/rate-plan/rate-plan.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
+import { NightAuditModule } from './modules/night-audit/night-audit.module';
+import { ReportsModule } from './modules/reports/reports.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 
 @Module({
@@ -30,6 +32,8 @@ import { WebhookModule } from './modules/webhook/webhook.module';
     RatePlanModule,
     PaymentModule,
     HousekeepingModule,
+    NightAuditModule,
+    ReportsModule,
     WebhookModule,
   ],
 })
