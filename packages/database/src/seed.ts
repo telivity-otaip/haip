@@ -1,0 +1,627 @@
+/**
+ * HAIP Demo Seed — "Telivity Grand Hotel"
+ *
+ * Creates a fully-populated demo property with enough data to exercise every
+ * dashboard screen.  Idempotent: uses property code 'TGH' as the anchor and
+ * skips if it already exists.
+ *
+ * Run:  pnpm --filter @haip/database seed
+ */
+
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { eq } from 'drizzle-orm';
+import * as schema from './schema/index.js';
+
+const DATABASE_URL =
+  process.env['DATABASE_URL'] ?? 'postgresql://haip:haip@localhost:5432/haip';
+
+const PROPERTY_CODE = 'TGH';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Deterministic UUID v5-style: prefix + padded index → valid UUID format */
+function sid(prefix: string, n: number): string {
+  const hex = prefix.padEnd(8, '0').slice(0, 8);
+  const idx = n.toString(16).padStart(4, '0');
+  return `${hex}-0000-4000-a000-${idx.padStart(12, '0')}`;
+}
+
+function daysFromNow(d: number): Date {
+  const dt = new Date();
+  dt.setDate(dt.getDate() + d);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
+}
+
+function dateStr(d: number): string {
+  return daysFromNow(d).toISOString().slice(0, 10);
+}
+
+function ts(d: number, hh = 0, mm = 0): Date {
+  const dt = daysFromNow(d);
+  dt.setHours(hh, mm, 0, 0);
+  return dt;
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const client = postgres(DATABASE_URL);
+  const db = drizzle(client, { schema });
+
+  // Idempotency check
+  const existing = await db
+    .select()
+    .from(schema.properties)
+    .where(eq(schema.properties.code, PROPERTY_CODE))
+    .limit(1);
+
+  if (existing.length > 0) {
+    console.log(`Property "${PROPERTY_CODE}" already exists — skipping seed.`);
+    await client.end();
+    return;
+  }
+
+  console.log('Seeding Telivity Grand Hotel...');
+
+  // -----------------------------------------------------------------------
+  // 1. Property
+  // -----------------------------------------------------------------------
+  const propertyId = sid('a0000001', 1);
+
+  await db.insert(schema.properties).values({
+    id: propertyId,
+    name: 'Telivity Grand Hotel',
+    code: PROPERTY_CODE,
+    description: 'A luxury demo property for the HAIP platform.',
+    addressLine1: '100 Ocean Drive',
+    city: 'Miami Beach',
+    stateProvince: 'FL',
+    postalCode: '33139',
+    countryCode: 'US',
+    timezone: 'America/New_York',
+    currencyCode: 'USD',
+    defaultLanguage: 'en',
+    starRating: 5,
+    totalRooms: 40,
+    phone: '+1-305-555-0100',
+    email: 'info@telivitygrand.demo',
+    website: 'https://telivitygrand.demo',
+    checkInTime: '15:00',
+    checkOutTime: '11:00',
+    nightAuditTime: '02:00',
+    overbookingPercentage: 5,
+    settings: {
+      earlyCheckInFee: 50,
+      lateCheckoutFee: 75,
+      depositPercentage: 20,
+      requireInspection: true,
+      taxRate: 0.13,
+      noShowFeeAmount: 150,
+      noShowCutoffHour: 18,
+    },
+  });
+
+  // -----------------------------------------------------------------------
+  // 2. Room Types (4)
+  // -----------------------------------------------------------------------
+  const roomTypeIds = {
+    standard: sid('b0000001', 1),
+    deluxe: sid('b0000001', 2),
+    suite: sid('b0000001', 3),
+    penthouse: sid('b0000001', 4),
+  };
+
+  await db.insert(schema.roomTypes).values([
+    { id: roomTypeIds.standard, propertyId, name: 'Standard King', code: 'STK', maxOccupancy: 2, defaultOccupancy: 2, bedType: 'king', bedCount: 1, squareMeters: 30, isAccessible: false, amenities: ['wifi', 'tv', 'minibar', 'safe'], sortOrder: 1 },
+    { id: roomTypeIds.deluxe, propertyId, name: 'Deluxe Ocean View', code: 'DOV', maxOccupancy: 3, defaultOccupancy: 2, bedType: 'king', bedCount: 1, squareMeters: 42, isAccessible: false, amenities: ['wifi', 'tv', 'minibar', 'safe', 'balcony', 'ocean_view'], sortOrder: 2 },
+    { id: roomTypeIds.suite, propertyId, name: 'Junior Suite', code: 'JST', maxOccupancy: 4, defaultOccupancy: 2, bedType: 'king', bedCount: 1, squareMeters: 55, isAccessible: false, amenities: ['wifi', 'tv', 'minibar', 'safe', 'balcony', 'ocean_view', 'living_area', 'espresso_machine'], sortOrder: 3 },
+    { id: roomTypeIds.penthouse, propertyId, name: 'Penthouse Suite', code: 'PHS', maxOccupancy: 4, defaultOccupancy: 2, bedType: 'king', bedCount: 1, squareMeters: 95, isAccessible: false, amenities: ['wifi', 'tv', 'minibar', 'safe', 'terrace', 'ocean_view', 'living_area', 'dining_area', 'espresso_machine', 'jacuzzi'], sortOrder: 4 },
+  ]);
+
+  // -----------------------------------------------------------------------
+  // 3. Rooms (40 across 4 floors, mixed statuses)
+  // -----------------------------------------------------------------------
+  type RoomStatus = 'vacant_clean' | 'vacant_dirty' | 'clean' | 'inspected' | 'guest_ready' | 'occupied' | 'out_of_order' | 'out_of_service';
+
+  interface RoomDef {
+    number: string;
+    floor: string;
+    typeKey: keyof typeof roomTypeIds;
+    status: RoomStatus;
+    accessible?: boolean;
+  }
+
+  const roomDefs: RoomDef[] = [
+    // Floor 1 — 10 rooms (Standard)
+    { number: '101', floor: '1', typeKey: 'standard', status: 'occupied' },
+    { number: '102', floor: '1', typeKey: 'standard', status: 'occupied' },
+    { number: '103', floor: '1', typeKey: 'standard', status: 'vacant_dirty' },
+    { number: '104', floor: '1', typeKey: 'standard', status: 'guest_ready' },
+    { number: '105', floor: '1', typeKey: 'standard', status: 'guest_ready' },
+    { number: '106', floor: '1', typeKey: 'standard', status: 'clean' },
+    { number: '107', floor: '1', typeKey: 'standard', status: 'inspected' },
+    { number: '108', floor: '1', typeKey: 'standard', status: 'vacant_clean' },
+    { number: '109', floor: '1', typeKey: 'standard', status: 'out_of_order', accessible: true },
+    { number: '110', floor: '1', typeKey: 'standard', status: 'occupied', accessible: true },
+    // Floor 2 — 10 rooms (Deluxe)
+    { number: '201', floor: '2', typeKey: 'deluxe', status: 'occupied' },
+    { number: '202', floor: '2', typeKey: 'deluxe', status: 'occupied' },
+    { number: '203', floor: '2', typeKey: 'deluxe', status: 'vacant_dirty' },
+    { number: '204', floor: '2', typeKey: 'deluxe', status: 'guest_ready' },
+    { number: '205', floor: '2', typeKey: 'deluxe', status: 'guest_ready' },
+    { number: '206', floor: '2', typeKey: 'deluxe', status: 'clean' },
+    { number: '207', floor: '2', typeKey: 'deluxe', status: 'inspected' },
+    { number: '208', floor: '2', typeKey: 'deluxe', status: 'vacant_clean' },
+    { number: '209', floor: '2', typeKey: 'deluxe', status: 'out_of_service' },
+    { number: '210', floor: '2', typeKey: 'deluxe', status: 'occupied' },
+    // Floor 3 — 10 rooms (Suite)
+    { number: '301', floor: '3', typeKey: 'suite', status: 'occupied' },
+    { number: '302', floor: '3', typeKey: 'suite', status: 'occupied' },
+    { number: '303', floor: '3', typeKey: 'suite', status: 'vacant_dirty' },
+    { number: '304', floor: '3', typeKey: 'suite', status: 'guest_ready' },
+    { number: '305', floor: '3', typeKey: 'suite', status: 'guest_ready' },
+    { number: '306', floor: '3', typeKey: 'suite', status: 'clean' },
+    { number: '307', floor: '3', typeKey: 'suite', status: 'inspected' },
+    { number: '308', floor: '3', typeKey: 'suite', status: 'vacant_clean' },
+    { number: '309', floor: '3', typeKey: 'suite', status: 'occupied' },
+    { number: '310', floor: '3', typeKey: 'suite', status: 'occupied' },
+    // Floor 4 — 10 rooms (Penthouse + mix)
+    { number: '401', floor: '4', typeKey: 'penthouse', status: 'occupied' },
+    { number: '402', floor: '4', typeKey: 'penthouse', status: 'guest_ready' },
+    { number: '403', floor: '4', typeKey: 'penthouse', status: 'vacant_dirty' },
+    { number: '404', floor: '4', typeKey: 'penthouse', status: 'vacant_clean' },
+    { number: '405', floor: '4', typeKey: 'suite', status: 'occupied' },
+    { number: '406', floor: '4', typeKey: 'suite', status: 'guest_ready' },
+    { number: '407', floor: '4', typeKey: 'suite', status: 'clean' },
+    { number: '408', floor: '4', typeKey: 'deluxe', status: 'occupied' },
+    { number: '409', floor: '4', typeKey: 'deluxe', status: 'guest_ready' },
+    { number: '410', floor: '4', typeKey: 'deluxe', status: 'out_of_order' },
+  ];
+
+  const roomIdMap: Record<string, string> = {};
+
+  await db.insert(schema.rooms).values(
+    roomDefs.map((r, i) => {
+      const id = sid('c0000001', i + 1);
+      roomIdMap[r.number] = id;
+      return {
+        id,
+        propertyId,
+        roomTypeId: roomTypeIds[r.typeKey],
+        number: r.number,
+        floor: r.floor,
+        building: 'Main',
+        status: r.status,
+        isAccessible: r.accessible ?? false,
+        maintenanceNotes: r.status === 'out_of_order' ? 'HVAC repair scheduled' : null,
+      };
+    }),
+  );
+
+  // -----------------------------------------------------------------------
+  // 4. Rate Plans (4 base + 1 derived)
+  // -----------------------------------------------------------------------
+  const rpIds = {
+    stdBar: sid('d0000001', 1),
+    dlxBar: sid('d0000001', 2),
+    suiteBar: sid('d0000001', 3),
+    phBar: sid('d0000001', 4),
+    dlxPromo: sid('d0000001', 5),
+  };
+
+  await db.insert(schema.ratePlans).values([
+    { id: rpIds.stdBar, propertyId, roomTypeId: roomTypeIds.standard, name: 'Standard BAR', code: 'STK-BAR', type: 'bar', baseAmount: '189.00', currencyCode: 'USD', mealPlan: 'room_only', sortOrder: 1 },
+    { id: rpIds.dlxBar, propertyId, roomTypeId: roomTypeIds.deluxe, name: 'Deluxe BAR', code: 'DOV-BAR', type: 'bar', baseAmount: '289.00', currencyCode: 'USD', mealPlan: 'breakfast', sortOrder: 2 },
+    { id: rpIds.suiteBar, propertyId, roomTypeId: roomTypeIds.suite, name: 'Suite BAR', code: 'JST-BAR', type: 'bar', baseAmount: '429.00', currencyCode: 'USD', mealPlan: 'breakfast', sortOrder: 3 },
+    { id: rpIds.phBar, propertyId, roomTypeId: roomTypeIds.penthouse, name: 'Penthouse BAR', code: 'PHS-BAR', type: 'bar', baseAmount: '799.00', currencyCode: 'USD', mealPlan: 'half_board', sortOrder: 4 },
+    { id: rpIds.dlxPromo, propertyId, roomTypeId: roomTypeIds.deluxe, name: 'Deluxe Summer Promo', code: 'DOV-SUM', type: 'promotional', baseAmount: '239.00', currencyCode: 'USD', mealPlan: 'breakfast', validFrom: dateStr(0), validTo: dateStr(90), channelCodes: ['booking_com', 'expedia'], sortOrder: 5 },
+  ]);
+
+  // Rate restrictions — weekend surcharges + min-LOS
+  await db.insert(schema.rateRestrictions).values([
+    { id: sid('d1000001', 1), propertyId, ratePlanId: rpIds.stdBar, startDate: dateStr(0), endDate: dateStr(90), minLos: 1, maxLos: 14, dayOfWeekOverrides: { friday: 20, saturday: 30 } },
+    { id: sid('d1000001', 2), propertyId, ratePlanId: rpIds.dlxBar, startDate: dateStr(0), endDate: dateStr(90), minLos: 2, dayOfWeekOverrides: { friday: 30, saturday: 40 } },
+    { id: sid('d1000001', 3), propertyId, ratePlanId: rpIds.suiteBar, startDate: dateStr(0), endDate: dateStr(60), minLos: 2, maxLos: 7 },
+  ]);
+
+  // -----------------------------------------------------------------------
+  // 5. Guests (15)
+  // -----------------------------------------------------------------------
+  interface GuestDef {
+    first: string; last: string; email: string; phone: string;
+    vip: 'none' | 'silver' | 'gold' | 'platinum' | 'diamond';
+    company?: string; loyalty?: string; isDnr?: boolean; dnrReason?: string;
+  }
+
+  const guestDefs: GuestDef[] = [
+    { first: 'James', last: 'Morrison', email: 'james.morrison@example.com', phone: '+1-305-555-0201', vip: 'diamond', company: 'Morrison Capital', loyalty: 'TGH-D001' },
+    { first: 'Sofia', last: 'Chen', email: 'sofia.chen@example.com', phone: '+1-305-555-0202', vip: 'platinum', loyalty: 'TGH-P002' },
+    { first: 'Marcus', last: 'Williams', email: 'marcus.w@example.com', phone: '+1-305-555-0203', vip: 'gold', company: 'Williams Group' },
+    { first: 'Elena', last: 'Petrova', email: 'elena.p@example.com', phone: '+7-495-555-0204', vip: 'gold' },
+    { first: 'David', last: 'Park', email: 'david.park@example.com', phone: '+82-2-555-0205', vip: 'silver', company: 'Park Industries' },
+    { first: 'Sarah', last: 'Johnson', email: 'sarah.j@example.com', phone: '+1-212-555-0206', vip: 'none' },
+    { first: 'Ahmed', last: 'Al-Rashid', email: 'ahmed.ar@example.com', phone: '+971-4-555-0207', vip: 'platinum', company: 'Al-Rashid Holdings' },
+    { first: 'Maria', last: 'Garcia', email: 'maria.g@example.com', phone: '+34-91-555-0208', vip: 'none' },
+    { first: 'Takeshi', last: 'Yamamoto', email: 'takeshi.y@example.com', phone: '+81-3-555-0209', vip: 'silver' },
+    { first: 'Lisa', last: 'Thompson', email: 'lisa.t@example.com', phone: '+1-415-555-0210', vip: 'none' },
+    { first: 'Hans', last: 'Mueller', email: 'hans.m@example.com', phone: '+49-30-555-0211', vip: 'gold', company: 'Mueller GmbH' },
+    { first: 'Priya', last: 'Patel', email: 'priya.p@example.com', phone: '+91-22-555-0212', vip: 'none' },
+    { first: 'Robert', last: 'Brown', email: 'robert.b@example.com', phone: '+1-310-555-0213', vip: 'none', isDnr: true, dnrReason: 'Property damage incident - March 2025' },
+    { first: 'Yuki', last: 'Tanaka', email: 'yuki.t@example.com', phone: '+81-6-555-0214', vip: 'silver' },
+    { first: 'Carlos', last: 'Rivera', email: 'carlos.r@example.com', phone: '+52-55-555-0215', vip: 'none' },
+  ];
+
+  const guestIds = guestDefs.map((_, i) => sid('e0000001', i + 1));
+
+  await db.insert(schema.guests).values(
+    guestDefs.map((g, i) => ({
+      id: guestIds[i],
+      firstName: g.first,
+      lastName: g.last,
+      email: g.email,
+      phone: g.phone,
+      vipLevel: g.vip,
+      companyName: g.company ?? null,
+      loyaltyNumber: g.loyalty ?? null,
+      isDnr: g.isDnr ?? false,
+      dnrReason: g.dnrReason ?? null,
+      dnrDate: g.isDnr ? new Date() : null,
+      nationality: 'US',
+      gdprConsentMarketing: true,
+      gdprConsentDate: new Date(),
+    })),
+  );
+
+  // -----------------------------------------------------------------------
+  // 6. Bookings + Reservations (various states)
+  // -----------------------------------------------------------------------
+  // Helper to create a booking+reservation pair
+  interface ResDef {
+    guestIdx: number;
+    arrival: number; // days from now
+    departure: number;
+    roomNum: string;
+    typeKey: keyof typeof roomTypeIds;
+    rpKey: keyof typeof rpIds;
+    status: 'pending' | 'confirmed' | 'assigned' | 'checked_in' | 'stayover' | 'due_out' | 'checked_out' | 'no_show' | 'cancelled';
+    source: 'direct' | 'ota' | 'gds' | 'phone' | 'walk_in' | 'agent' | 'group' | 'corporate';
+    amount: number;
+  }
+
+  const resDefs: ResDef[] = [
+    // Past — checked out
+    { guestIdx: 0, arrival: -10, departure: -7, roomNum: '401', typeKey: 'penthouse', rpKey: 'phBar', status: 'checked_out', source: 'direct', amount: 2397 },
+    { guestIdx: 5, arrival: -5, departure: -2, roomNum: '104', typeKey: 'standard', rpKey: 'stdBar', status: 'checked_out', source: 'ota', amount: 567 },
+    { guestIdx: 7, arrival: -3, departure: -1, roomNum: '203', typeKey: 'deluxe', rpKey: 'dlxBar', status: 'checked_out', source: 'phone', amount: 578 },
+    // Currently in-house (checked_in)
+    { guestIdx: 0, arrival: -2, departure: 3, roomNum: '401', typeKey: 'penthouse', rpKey: 'phBar', status: 'checked_in', source: 'direct', amount: 3995 },
+    { guestIdx: 1, arrival: -1, departure: 4, roomNum: '301', typeKey: 'suite', rpKey: 'suiteBar', status: 'checked_in', source: 'direct', amount: 2145 },
+    { guestIdx: 2, arrival: -3, departure: 1, roomNum: '201', typeKey: 'deluxe', rpKey: 'dlxBar', status: 'checked_in', source: 'corporate', amount: 1156 },
+    { guestIdx: 3, arrival: -1, departure: 2, roomNum: '202', typeKey: 'deluxe', rpKey: 'dlxBar', status: 'checked_in', source: 'ota', amount: 867 },
+    { guestIdx: 4, arrival: -2, departure: 1, roomNum: '101', typeKey: 'standard', rpKey: 'stdBar', status: 'checked_in', source: 'gds', amount: 567 },
+    { guestIdx: 6, arrival: -1, departure: 3, roomNum: '302', typeKey: 'suite', rpKey: 'suiteBar', status: 'checked_in', source: 'agent', amount: 1716 },
+    { guestIdx: 8, arrival: -2, departure: 2, roomNum: '102', typeKey: 'standard', rpKey: 'stdBar', status: 'checked_in', source: 'ota', amount: 756 },
+    { guestIdx: 10, arrival: -1, departure: 2, roomNum: '210', typeKey: 'deluxe', rpKey: 'dlxBar', status: 'checked_in', source: 'corporate', amount: 867 },
+    { guestIdx: 13, arrival: -3, departure: 0, roomNum: '309', typeKey: 'suite', rpKey: 'suiteBar', status: 'checked_in', source: 'direct', amount: 1287 },
+    { guestIdx: 14, arrival: -2, departure: 0, roomNum: '310', typeKey: 'suite', rpKey: 'suiteBar', status: 'checked_in', source: 'walk_in', amount: 858 },
+    { guestIdx: 9, arrival: -1, departure: 1, roomNum: '405', typeKey: 'suite', rpKey: 'suiteBar', status: 'checked_in', source: 'phone', amount: 858 },
+    { guestIdx: 11, arrival: -2, departure: 3, roomNum: '408', typeKey: 'deluxe', rpKey: 'dlxBar', status: 'checked_in', source: 'ota', amount: 1445 },
+    { guestIdx: 7, arrival: -1, departure: 1, roomNum: '110', typeKey: 'standard', rpKey: 'stdBar', status: 'checked_in', source: 'direct', amount: 378 },
+    // Today arrivals (confirmed, waiting check-in)
+    { guestIdx: 5, arrival: 0, departure: 3, roomNum: '104', typeKey: 'standard', rpKey: 'stdBar', status: 'confirmed', source: 'ota', amount: 567 },
+    { guestIdx: 12, arrival: 0, departure: 2, roomNum: '204', typeKey: 'deluxe', rpKey: 'dlxBar', status: 'confirmed', source: 'direct', amount: 578 },
+    // Future reservations
+    { guestIdx: 0, arrival: 7, departure: 14, roomNum: '401', typeKey: 'penthouse', rpKey: 'phBar', status: 'confirmed', source: 'direct', amount: 5593 },
+    { guestIdx: 3, arrival: 5, departure: 8, roomNum: '301', typeKey: 'suite', rpKey: 'suiteBar', status: 'confirmed', source: 'ota', amount: 1287 },
+    { guestIdx: 9, arrival: 10, departure: 14, roomNum: '205', typeKey: 'deluxe', rpKey: 'dlxBar', status: 'pending', source: 'phone', amount: 1156 },
+    // No-show
+    { guestIdx: 14, arrival: -1, departure: 1, roomNum: '108', typeKey: 'standard', rpKey: 'stdBar', status: 'no_show', source: 'ota', amount: 378 },
+    // Cancelled
+    { guestIdx: 11, arrival: 3, departure: 5, roomNum: '206', typeKey: 'deluxe', rpKey: 'dlxBar', status: 'cancelled', source: 'gds', amount: 578 },
+  ];
+
+  for (const [i, r] of resDefs.entries()) {
+    const bookingId = sid('f0000001', i + 1);
+    const resId = sid('f1000001', i + 1);
+    const confNum = `TGH-${(2025000 + i + 1).toString()}`;
+    const guestId = guestIds[r.guestIdx]!;
+
+    await db.insert(schema.bookings).values({
+      id: bookingId,
+      propertyId,
+      guestId,
+      confirmationNumber: confNum,
+      source: r.source,
+      channelCode: r.source === 'ota' ? 'booking_com' : null,
+    });
+
+    const nights = r.departure - r.arrival;
+    const checkedIn = ['checked_in', 'stayover', 'due_out'].includes(r.status);
+    const checkedOut = r.status === 'checked_out';
+
+    await db.insert(schema.reservations).values({
+      id: resId,
+      propertyId,
+      bookingId,
+      guestId,
+      arrivalDate: dateStr(r.arrival),
+      departureDate: dateStr(r.departure),
+      nights,
+      roomTypeId: roomTypeIds[r.typeKey],
+      roomId: roomIdMap[r.roomNum] ?? null,
+      status: r.status,
+      ratePlanId: rpIds[r.rpKey],
+      totalAmount: r.amount.toFixed(2),
+      currencyCode: 'USD',
+      adults: 2,
+      children: 0,
+      checkedInAt: checkedIn || checkedOut ? ts(r.arrival, 15, 30) : null,
+      checkedOutAt: checkedOut ? ts(r.departure, 10, 45) : null,
+      cancelledAt: r.status === 'cancelled' ? new Date() : null,
+      cancellationReason: r.status === 'cancelled' ? 'Guest requested cancellation' : null,
+    });
+
+    // Create folios for checked-in and checked-out reservations
+    if (checkedIn || checkedOut) {
+      const folioId = sid('f2000001', i + 1);
+      const nightsStayed = checkedOut ? nights : Math.max(1, -r.arrival);
+      const roomRate = r.amount / nights;
+      const totalCharges = roomRate * nightsStayed * 1.13; // +13% tax
+      const totalPayments = checkedOut ? totalCharges : roomRate * 1.13; // deposit
+
+      await db.insert(schema.folios).values({
+        id: folioId,
+        propertyId,
+        reservationId: resId,
+        bookingId,
+        guestId,
+        folioNumber: `F-${confNum}`,
+        type: 'guest',
+        status: checkedOut ? 'closed' : 'open',
+        totalCharges: totalCharges.toFixed(2),
+        totalPayments: totalPayments.toFixed(2),
+        balance: (totalCharges - totalPayments).toFixed(2),
+        currencyCode: 'USD',
+        settledAt: checkedOut ? ts(r.departure, 10, 50) : null,
+        closedAt: checkedOut ? ts(r.departure, 10, 55) : null,
+      });
+
+      // Room charges — one per night stayed
+      for (let n = 0; n < nightsStayed; n++) {
+        const chargeDay = r.arrival + n;
+        const taxAmt = roomRate * 0.13;
+        await db.insert(schema.charges).values({
+          id: sid('f3000001', i * 20 + n + 1),
+          propertyId,
+          folioId,
+          type: 'room',
+          description: `Room ${r.roomNum} — Night ${n + 1}`,
+          amount: roomRate.toFixed(2),
+          currencyCode: 'USD',
+          taxAmount: taxAmt.toFixed(2),
+          taxRate: '0.1300',
+          serviceDate: ts(chargeDay),
+          isLocked: checkedOut,
+        });
+      }
+
+      // Incidental charges for some guests
+      if (i % 3 === 0) {
+        await db.insert(schema.charges).values({
+          id: sid('f3100001', i + 1),
+          propertyId,
+          folioId,
+          type: 'minibar',
+          description: 'Minibar consumption',
+          amount: '42.00',
+          currencyCode: 'USD',
+          taxAmount: '5.46',
+          taxRate: '0.1300',
+          serviceDate: ts(r.arrival + 1),
+        });
+      }
+      if (i % 4 === 0) {
+        await db.insert(schema.charges).values({
+          id: sid('f3200001', i + 1),
+          propertyId,
+          folioId,
+          type: 'spa',
+          description: 'Spa — Deep Tissue Massage',
+          amount: '180.00',
+          currencyCode: 'USD',
+          taxAmount: '23.40',
+          taxRate: '0.1300',
+          serviceDate: ts(r.arrival),
+        });
+      }
+
+      // Payments
+      await db.insert(schema.payments).values({
+        id: sid('f4000001', i + 1),
+        propertyId,
+        folioId,
+        method: i % 2 === 0 ? 'credit_card' : 'cash',
+        status: checkedOut ? 'settled' : 'captured',
+        amount: totalPayments.toFixed(2),
+        currencyCode: 'USD',
+        cardLastFour: i % 2 === 0 ? '4242' : null,
+        cardBrand: i % 2 === 0 ? 'Visa' : null,
+        processedAt: ts(r.arrival, 15, 35),
+      });
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 7. Housekeeping Tasks
+  // -----------------------------------------------------------------------
+  const hkStaffId1 = sid('00aaaaaa', 1);
+  const hkStaffId2 = sid('00aaaaaa', 2);
+  const hkInspector = sid('00aaaaaa', 3);
+
+  const hkTasks: {
+    roomNum: string; type: 'checkout' | 'stayover' | 'deep_clean' | 'inspection' | 'turndown' | 'maintenance';
+    status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'inspected' | 'skipped';
+    assignedTo?: string; priority?: number; daysAgo?: number;
+  }[] = [
+    // Today's tasks
+    { roomNum: '103', type: 'checkout', status: 'pending', priority: 8 },
+    { roomNum: '203', type: 'checkout', status: 'assigned', assignedTo: hkStaffId1, priority: 7 },
+    { roomNum: '303', type: 'checkout', status: 'in_progress', assignedTo: hkStaffId2, priority: 6 },
+    { roomNum: '403', type: 'checkout', status: 'pending', priority: 5 },
+    { roomNum: '101', type: 'stayover', status: 'assigned', assignedTo: hkStaffId1, priority: 3 },
+    { roomNum: '201', type: 'stayover', status: 'pending', priority: 3 },
+    { roomNum: '301', type: 'stayover', status: 'assigned', assignedTo: hkStaffId2, priority: 3 },
+    { roomNum: '102', type: 'stayover', status: 'pending', priority: 2 },
+    { roomNum: '106', type: 'inspection', status: 'pending', priority: 4 },
+    { roomNum: '206', type: 'inspection', status: 'pending', priority: 4 },
+    { roomNum: '109', type: 'maintenance', status: 'pending', priority: 10 },
+    // Completed tasks (yesterday)
+    { roomNum: '104', type: 'checkout', status: 'inspected', assignedTo: hkStaffId1, priority: 5, daysAgo: 1 },
+    { roomNum: '105', type: 'checkout', status: 'inspected', assignedTo: hkStaffId2, priority: 5, daysAgo: 1 },
+    { roomNum: '204', type: 'checkout', status: 'inspected', assignedTo: hkStaffId1, priority: 5, daysAgo: 1 },
+    { roomNum: '205', type: 'checkout', status: 'inspected', assignedTo: hkStaffId2, priority: 5, daysAgo: 1 },
+    { roomNum: '304', type: 'checkout', status: 'completed', assignedTo: hkStaffId1, priority: 5, daysAgo: 1 },
+    { roomNum: '305', type: 'checkout', status: 'completed', assignedTo: hkStaffId2, priority: 5, daysAgo: 1 },
+    { roomNum: '402', type: 'checkout', status: 'inspected', assignedTo: hkStaffId1, priority: 5, daysAgo: 1 },
+  ];
+
+  await db.insert(schema.housekeepingTasks).values(
+    hkTasks.map((t, i) => {
+      const day = t.daysAgo ?? 0;
+      const isCompleted = ['completed', 'inspected'].includes(t.status);
+      const isAssigned = ['assigned', 'in_progress', 'completed', 'inspected'].includes(t.status);
+      const isStarted = ['in_progress', 'completed', 'inspected'].includes(t.status);
+      return {
+        id: sid('a1000001', i + 1),
+        propertyId,
+        roomId: roomIdMap[t.roomNum]!,
+        type: t.type,
+        status: t.status,
+        priority: t.priority ?? 0,
+        assignedTo: t.assignedTo ?? null,
+        assignedAt: isAssigned ? ts(-day, 7, 0) : null,
+        startedAt: isStarted ? ts(-day, 7, 30) : null,
+        completedAt: isCompleted ? ts(-day, 8, 15) : null,
+        inspectedBy: t.status === 'inspected' ? hkInspector : null,
+        inspectedAt: t.status === 'inspected' ? ts(-day, 8, 45) : null,
+        checklist: [
+          { item: 'Strip and remake bed', checked: isCompleted },
+          { item: 'Clean bathroom', checked: isCompleted },
+          { item: 'Vacuum carpet', checked: isCompleted },
+          { item: 'Restock amenities', checked: isCompleted },
+          { item: 'Dust surfaces', checked: isStarted },
+          { item: 'Empty trash', checked: isStarted },
+        ],
+        serviceDate: daysFromNow(-day),
+        maintenanceRequired: t.type === 'maintenance',
+        maintenanceNotes: t.type === 'maintenance' ? 'HVAC unit not cooling — needs technician' : null,
+      };
+    }),
+  );
+
+  // -----------------------------------------------------------------------
+  // 8. Night Audit Run (yesterday)
+  // -----------------------------------------------------------------------
+  await db.insert(schema.auditRuns).values({
+    id: sid('a2000001', 1),
+    propertyId,
+    businessDate: dateStr(-1),
+    status: 'completed',
+    roomChargesPosted: '4250.00',
+    taxChargesPosted: '552.50',
+    noShowsProcessed: '1',
+    summary: {
+      steps: [
+        { step: 'Post room charges', count: 16, status: 'completed' },
+        { step: 'Post tax charges', count: 16, status: 'completed' },
+        { step: 'Process no-shows', count: 1, status: 'completed' },
+        { step: 'Advance business date', count: 1, status: 'completed' },
+        { step: 'Update stayover status', count: 14, status: 'completed' },
+      ],
+    },
+    startedAt: ts(-1, 2, 0),
+    completedAt: ts(-1, 2, 3),
+  });
+
+  // -----------------------------------------------------------------------
+  // 9. Channel Connection (Booking.com)
+  // -----------------------------------------------------------------------
+  await db.insert(schema.channelConnections).values({
+    id: sid('a3000001', 1),
+    propertyId,
+    channelCode: 'booking_com',
+    channelName: 'Booking.com',
+    adapterType: 'ota_xml',
+    status: 'active',
+    syncDirection: 'bidirectional',
+    config: { hotelId: 'BDC-12345', apiKey: '***masked***' },
+    ratePlanMapping: [
+      { ratePlanId: rpIds.stdBar, channelRateCode: 'STK_RACK' },
+      { ratePlanId: rpIds.dlxBar, channelRateCode: 'DOV_RACK' },
+      { ratePlanId: rpIds.dlxPromo, channelRateCode: 'DOV_PROMO' },
+    ],
+    roomTypeMapping: [
+      { roomTypeId: roomTypeIds.standard, channelRoomCode: 'SGL_KING' },
+      { roomTypeId: roomTypeIds.deluxe, channelRoomCode: 'DBL_OCEAN' },
+    ],
+    lastSyncAt: ts(-1, 3, 15),
+    lastSyncStatus: 'success',
+  });
+
+  // Second channel — Expedia (inactive, for variety)
+  await db.insert(schema.channelConnections).values({
+    id: sid('a3000001', 2),
+    propertyId,
+    channelCode: 'expedia',
+    channelName: 'Expedia',
+    adapterType: 'ews',
+    status: 'pending_setup',
+    syncDirection: 'push',
+    config: {},
+    lastSyncAt: null,
+  });
+
+  // -----------------------------------------------------------------------
+  // 10. Agent Webhook Subscription
+  // -----------------------------------------------------------------------
+  await db.insert(schema.agentWebhookSubscriptions).values({
+    id: sid('a4000001', 1),
+    propertyId,
+    subscriberId: 'otaip-agent-001',
+    subscriberName: 'OTAIP Booking Agent',
+    callbackUrl: 'https://otaip.demo/webhooks/haip',
+    events: ['reservation.created', 'reservation.updated', 'reservation.cancelled', 'room.status_changed', 'folio.settled'],
+    secret: 'whsec_demo_secret_key',
+    isActive: true,
+    failureCount: 0,
+  });
+
+  // -----------------------------------------------------------------------
+  // Done
+  // -----------------------------------------------------------------------
+  console.log('Seed complete.');
+  console.log('  Property:      Telivity Grand Hotel (TGH)');
+  console.log('  Room Types:    4');
+  console.log('  Rooms:         40 across 4 floors');
+  console.log('  Guests:        15');
+  console.log('  Reservations:  23 (past, in-house, arrivals, future, no-show, cancelled)');
+  console.log('  Folios:        16 with charges & payments');
+  console.log('  Rate Plans:    5 with restrictions');
+  console.log('  HK Tasks:      18 (mix of statuses)');
+  console.log('  Night Audit:   1 completed run');
+  console.log('  Channels:      2 connections');
+  console.log('  Webhooks:      1 subscription');
+
+  await client.end();
+}
+
+main().catch((err) => {
+  console.error('Seed failed:', err);
+  process.exit(1);
+});
