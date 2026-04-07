@@ -45,6 +45,12 @@ export class CheckInDto {
   @IsNumber()
   depositAmount?: number;
 
+  @ApiPropertyOptional({ description: 'Stripe PaymentMethod ID (pm_xxx) from Stripe.js/Elements' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  paymentMethodId?: string;
+
   @ApiPropertyOptional({ description: 'Tokenized card for deposit auth (NEVER raw card data)' })
   @IsOptional()
   @IsString()

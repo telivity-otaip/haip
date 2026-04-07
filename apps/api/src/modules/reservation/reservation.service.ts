@@ -299,8 +299,10 @@ export class ReservationService {
     }
 
     // Deposit authorization (if token provided and not skipped)
+    // Accept paymentMethodId (Stripe Elements) as alias for gatewayPaymentToken
+    const paymentToken = dto.paymentMethodId ?? dto.gatewayPaymentToken;
     let depositAuth: unknown = null;
-    if (!dto.skipDepositAuth && dto.gatewayPaymentToken) {
+    if (!dto.skipDepositAuth && paymentToken) {
       const depositAmount = dto.depositAmount
         ? String(dto.depositAmount)
         : (parseFloat(reservation.totalAmount) * 1.2).toFixed(2);
@@ -311,7 +313,7 @@ export class ReservationService {
           amount: depositAmount,
           currencyCode: reservation.currencyCode,
           gatewayProvider: dto.gatewayProvider ?? 'stripe',
-          gatewayPaymentToken: dto.gatewayPaymentToken,
+          gatewayPaymentToken: paymentToken,
           cardLastFour: dto.cardLastFour,
           cardBrand: dto.cardBrand,
         });
