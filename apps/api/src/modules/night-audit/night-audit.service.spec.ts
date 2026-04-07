@@ -10,8 +10,15 @@ import { RoomStatusService } from '../room/room-status.service';
 import { WebhookService } from '../webhook/webhook.service';
 
 const mockFolioService = {
-  postRoomTariff: vi.fn().mockResolvedValue({ id: 'charge-room-001' }),
-  postCharge: vi.fn().mockResolvedValue({ id: 'charge-tax-001' }),
+  postCharge: vi.fn().mockResolvedValue({
+    id: 'charge-room-001',
+    amount: '150.00',
+    taxCharges: [
+      { id: 'tax-001', amount: '9.00', code: 'FL_SALES' },
+      { id: 'tax-002', amount: '1.50', code: 'MIAMI_DADE_SURTAX' },
+      { id: 'tax-003', amount: '9.00', code: 'MIAMI_DADE_TDT' },
+    ],
+  }),
   createAutoFolio: vi.fn().mockResolvedValue({
     id: 'folio-new',
     status: 'open',
@@ -223,14 +230,12 @@ describe('NightAuditService', () => {
 
   it('should post room tariffs to in-house reservation folios', async () => {
     // select 1: in-house reservations
-    // select 2: property settings
-    // select 3: open folio
-    // select 4: existing charge check (none)
-    // select 5: rate plan
+    // select 2: open folio
+    // select 3: existing charge check (none)
+    // select 4: rate plan
     const db = createMockDb({
       selectResults: [
         [mockReservation],                                     // in-house reservations
-        [{ settings: { taxRate: 0.10 }, totalRooms: 20 }],    // property
         [mockFolio],                                           // open folio
         [],                                                     // no existing charge
         [{ baseAmount: '150.00' }],                            // rate plan
@@ -252,13 +257,12 @@ describe('NightAuditService', () => {
     const result = await service.postRoomTariffs('prop-001', '2026-04-06');
     expect(result.count).toBe(1);
     expect(result.totalRoom).toBe('150.00');
-    expect(result.totalTax).toBe('15.00');
-    expect(mockFolioService.postRoomTariff).toHaveBeenCalledWith(
-      'folio-001', 'prop-001', '150.00', 'USD', expect.any(Date),
-    );
+    // Tax amount comes from TaxService via postCharge auto-posting
+    expect(result.totalTax).toBe('19.50');
     expect(mockFolioService.postCharge).toHaveBeenCalledWith('folio-001', expect.objectContaining({
-      type: 'tax',
-      amount: '15.00',
+      type: 'room',
+      amount: '150.00',
+      guestId: 'guest-001',
     }));
   });
 
@@ -266,7 +270,6 @@ describe('NightAuditService', () => {
     const db = createMockDb({
       selectResults: [
         [mockReservation],                                      // reservations
-        [{ settings: { taxRate: 0.10 }, totalRooms: 20 }],     // property
         [mockFolio],                                            // folio
         [{ id: 'existing-charge-001' }],                        // existing charge found
       ],
@@ -286,14 +289,13 @@ describe('NightAuditService', () => {
 
     const result = await service.postRoomTariffs('prop-001', '2026-04-06');
     expect(result.count).toBe(0);
-    expect(mockFolioService.postRoomTariff).not.toHaveBeenCalled();
+    expect(mockFolioService.postCharge).not.toHaveBeenCalled();
   });
 
   it('should handle missing folio gracefully', async () => {
     const db = createMockDb({
       selectResults: [
         [mockReservation],
-        [{ settings: { taxRate: 0.10 }, totalRooms: 20 }],
         [],  // no folio
       ],
     });
@@ -320,7 +322,6 @@ describe('NightAuditService', () => {
     const db = createMockDb({
       selectResults: [
         [mockReservation],
-        [{ settings: { taxRate: 0.10 }, totalRooms: 20 }],
         [mockFolio],
         [],            // no existing charge
         [],            // no rate plan found
@@ -342,8 +343,8 @@ describe('NightAuditService', () => {
     const result = await service.postRoomTariffs('prop-001', '2026-04-06');
     // 450.00 / 3 nights = 150.00
     expect(result.totalRoom).toBe('150.00');
-    expect(mockFolioService.postRoomTariff).toHaveBeenCalledWith(
-      'folio-001', 'prop-001', '150.00', 'USD', expect.any(Date),
+    expect(mockFolioService.postCharge).toHaveBeenCalledWith(
+      'folio-001', expect.objectContaining({ type: 'room', amount: '150.00' }),
     );
   });
 
@@ -527,7 +528,6 @@ describe('NightAuditService', () => {
       selectResults: [
         [],          // findCompletedAudit: none
         [],          // postRoomTariffs: no in-house
-        [{ settings: { taxRate: 0.10 }, totalRooms: 20 }],  // property
         [],          // processNoShows: no candidates
         [{ settings: {} }],  // property for no-show
         // advanceStayovers + markDueOuts handled by update mock
@@ -573,7 +573,6 @@ describe('NightAuditService', () => {
       selectResults: [
         [],          // findCompletedAudit
         [],          // postRoomTariffs: no in-house
-        [{ settings: {}, totalRooms: 20 }],
         [],          // processNoShows
         [{ settings: {} }],
         [{ roomRevenue: '0', taxRevenue: '0', totalRevenue: '0' }],
@@ -647,14 +646,13 @@ describe('NightAuditService', () => {
 
   // --- Tax calculation ---
 
-  it('should use default 10% tax rate if not configured', async () => {
+  it('should sum tax amounts from TaxService auto-posted charges', async () => {
     const db = createMockDb({
       selectResults: [
         [mockReservation],
-        [{ settings: {}, totalRooms: 20 }],         // no taxRate in settings
         [mockFolio],
         [],                                           // no existing charge
-        [{ baseAmount: '200.00' }],                   // rate plan
+        [{ baseAmount: '150.00' }],                   // rate plan
       ],
     });
     const module = await Test.createTestingModule({
@@ -671,8 +669,8 @@ describe('NightAuditService', () => {
     service = module.get(NightAuditService);
 
     const result = await service.postRoomTariffs('prop-001', '2026-04-06');
-    // Default 10%: 200 * 0.10 = 20
-    expect(result.totalTax).toBe('20.00');
+    // Sum of mock taxCharges: 9.00 + 1.50 + 9.00 = 19.50
+    expect(result.totalTax).toBe('19.50');
   });
 
   // --- Room unassignment on no-show ---

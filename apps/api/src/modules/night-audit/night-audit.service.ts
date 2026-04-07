@@ -124,13 +124,6 @@ export class NightAuditService {
         ),
       );
 
-    // Get property tax rate
-    const [property] = await this.db
-      .select({ settings: properties.settings, totalRooms: properties.totalRooms })
-      .from(properties)
-      .where(eq(properties.id, propertyId));
-    const taxRate = (property?.settings as any)?.taxRate ?? 0.10;
-
     let totalRoom = 0;
     let totalTax = 0;
     let count = 0;
@@ -192,25 +185,21 @@ export class NightAuditService {
           rate = (parseFloat(reservation.totalAmount) / reservation.nights).toFixed(2);
         }
 
-        // Post room tariff
-        await this.folioService.postRoomTariff(
-          folio.id,
+        // Post room tariff — TaxService auto-posts tax charges via FolioService
+        const result = await this.folioService.postCharge(folio.id, {
           propertyId,
-          rate,
-          reservation.currencyCode,
-          serviceDateStart,
-        );
-
-        // Post tax as separate charge
-        const taxAmount = (parseFloat(rate) * taxRate).toFixed(2);
-        await this.folioService.postCharge(folio.id, {
-          propertyId,
-          type: 'tax',
-          description: `Room tax - ${businessDate}`,
-          amount: taxAmount,
+          type: 'room',
+          description: `Room tariff - ${businessDate}`,
+          amount: rate,
           currencyCode: reservation.currencyCode,
           serviceDate: serviceDateStart.toISOString(),
+          guestId: reservation.guestId,
         });
+
+        // Sum auto-posted tax charges
+        const taxAmount = (result.taxCharges ?? [])
+          .reduce((sum: number, tc: any) => sum + parseFloat(tc.amount), 0)
+          .toFixed(2);
 
         totalRoom += parseFloat(rate);
         totalTax += parseFloat(taxAmount);

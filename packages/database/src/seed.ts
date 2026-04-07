@@ -603,6 +603,58 @@ async function main() {
   });
 
   // -----------------------------------------------------------------------
+  // 11. Tax Profile — Miami Beach (13% total)
+  // -----------------------------------------------------------------------
+  const taxProfileId = sid('a5000001', 1);
+  const today = dateStr(0);
+
+  await db.insert(schema.taxProfiles).values({
+    id: taxProfileId,
+    propertyId,
+    name: 'Miami Beach Tax Profile',
+    jurisdictionCode: 'US-FL-MIAMI-BEACH',
+    isActive: true,
+    effectiveFrom: '2024-01-01',
+  });
+
+  await db.insert(schema.taxRules).values([
+    {
+      id: sid('a5100001', 1),
+      taxProfileId,
+      name: 'Florida State Sales Tax',
+      code: 'FL_SALES',
+      type: 'percentage',
+      rate: '6.0000',
+      appliesToChargeTypes: ['room'],
+      sortOrder: 1,
+      effectiveFrom: '2024-01-01',
+    },
+    {
+      id: sid('a5100001', 2),
+      taxProfileId,
+      name: 'Miami-Dade Discretionary Surtax',
+      code: 'MIAMI_DADE_SURTAX',
+      type: 'percentage',
+      rate: '1.0000',
+      appliesToChargeTypes: ['room'],
+      sortOrder: 2,
+      effectiveFrom: '2024-01-01',
+    },
+    {
+      id: sid('a5100001', 3),
+      taxProfileId,
+      name: 'Tourist Development Tax',
+      code: 'MIAMI_DADE_TDT',
+      type: 'percentage',
+      rate: '6.0000',
+      appliesToChargeTypes: ['room'],
+      exemptions: { guestTypes: ['government'] },
+      sortOrder: 3,
+      effectiveFrom: '2024-01-01',
+    },
+  ]);
+
+  // -----------------------------------------------------------------------
   // Done
   // -----------------------------------------------------------------------
   console.log('Seed complete.');
@@ -617,6 +669,7 @@ async function main() {
   console.log('  Night Audit:   1 completed run');
   console.log('  Channels:      2 connections');
   console.log('  Webhooks:      1 subscription');
+  console.log('  Tax Profile:   Miami Beach (FL Sales 6% + Surtax 1% + TDT 6% = 13%)');
 
   await client.end();
 }

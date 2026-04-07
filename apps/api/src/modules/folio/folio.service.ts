@@ -8,6 +8,7 @@ import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import { folios, charges, payments } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
+import { TaxService } from '../tax/tax.service';
 import { CreateFolioDto } from './dto/create-folio.dto';
 import { UpdateFolioDto } from './dto/update-folio.dto';
 import { ListFoliosDto } from './dto/list-folios.dto';
@@ -20,6 +21,7 @@ export class FolioService {
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly webhookService: WebhookService,
+    private readonly taxService: TaxService,
   ) {}
 
   async create(dto: CreateFolioDto) {
@@ -273,6 +275,39 @@ export class FolioService {
       })
       .returning();
 
+    // Auto-post tax charges if this is a taxable charge (not a tax or reversal itself)
+    const taxCharges: any[] = [];
+    if (charge.type !== 'tax' && charge.type !== 'adjustment' && !charge.isReversal && !dto.skipTaxCalculation) {
+      const taxItems = await this.taxService.calculateTaxes(
+        dto.amount,
+        dto.type,
+        dto.propertyId,
+        dto.serviceDate,
+        { guestId: dto.guestId, numberOfNights: dto.numberOfNights, nightNumber: dto.nightNumber },
+      );
+
+      for (const item of taxItems) {
+        const [taxCharge] = await this.db
+          .insert(charges)
+          .values({
+            propertyId: dto.propertyId,
+            folioId,
+            type: 'tax',
+            description: item.name,
+            amount: item.amount,
+            currencyCode: dto.currencyCode,
+            taxAmount: '0',
+            taxRate: item.rate,
+            taxCode: item.code,
+            serviceDate: new Date(dto.serviceDate),
+            parentChargeId: charge.id,
+            postedBy: dto.postedBy,
+          })
+          .returning();
+        taxCharges.push(taxCharge);
+      }
+    }
+
     await this.recalculateBalance(folioId, dto.propertyId);
 
     await this.webhookService.emit(
@@ -283,7 +318,7 @@ export class FolioService {
       dto.propertyId,
     );
 
-    return charge;
+    return { ...charge, taxCharges };
   }
 
   async reverseCharge(folioId: string, chargeId: string, propertyId: string) {
@@ -338,6 +373,48 @@ export class FolioService {
         originalChargeId: chargeId,
       })
       .returning();
+
+    // Cascade: reverse all child tax charges linked to this charge
+    const childTaxCharges = await this.db
+      .select()
+      .from(charges)
+      .where(
+        and(
+          eq(charges.parentChargeId, chargeId),
+          eq(charges.type, 'tax' as any),
+          eq(charges.isReversal, false),
+        ),
+      );
+
+    for (const taxCharge of childTaxCharges) {
+      // Check not already reversed
+      const [existingTaxReversal] = await this.db
+        .select()
+        .from(charges)
+        .where(
+          and(eq(charges.originalChargeId, taxCharge.id), eq(charges.isReversal, true)),
+        );
+      if (existingTaxReversal) continue;
+
+      await this.db
+        .insert(charges)
+        .values({
+          propertyId,
+          folioId,
+          type: 'tax',
+          description: `Reversal: ${taxCharge.description}`,
+          amount: (parseFloat(taxCharge.amount) * -1).toFixed(2),
+          currencyCode: taxCharge.currencyCode,
+          taxAmount: '0',
+          taxRate: taxCharge.taxRate,
+          taxCode: taxCharge.taxCode,
+          serviceDate: taxCharge.serviceDate,
+          isReversal: true,
+          originalChargeId: taxCharge.id,
+          parentChargeId: reversal.id,
+        })
+        .returning();
+    }
 
     await this.recalculateBalance(folioId, propertyId);
 

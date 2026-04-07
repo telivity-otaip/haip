@@ -65,3 +65,10 @@ export {
 
 // Connect / Agent Subscriptions
 export { agentWebhookSubscriptions } from './connect.js';
+
+// Tax
+export {
+  taxProfiles,
+  taxRuleTypeEnum,
+  taxRules,
+} from './tax.js';

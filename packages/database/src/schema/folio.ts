@@ -97,6 +97,7 @@ export const charges = pgTable('charges', {
   serviceDate: timestamp('service_date', { withTimezone: true }).notNull(), // Date the charge applies to
   isReversal: boolean('is_reversal').notNull().default(false),
   originalChargeId: uuid('original_charge_id'), // FK to self for reversals
+  parentChargeId: uuid('parent_charge_id'), // FK to self — tax charges linked to their parent charge
 
   // Night audit lock (KB 5.8: transactions locked after day close)
   isLocked: boolean('is_locked').notNull().default(false),

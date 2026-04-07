@@ -75,4 +75,19 @@ export class CreateChargeDto {
   @IsOptional()
   @IsUUID()
   postedBy?: string;
+
+  // Tax calculation context (not stored, used by TaxService)
+  @IsOptional()
+  @IsUUID()
+  guestId?: string;
+
+  @IsOptional()
+  numberOfNights?: number;
+
+  @IsOptional()
+  nightNumber?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  skipTaxCalculation?: boolean;
 }

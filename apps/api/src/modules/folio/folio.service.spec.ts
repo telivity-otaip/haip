@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { FolioService } from './folio.service';
 import { WebhookService } from '../webhook/webhook.service';
+import { TaxService } from '../tax/tax.service';
 import { DRIZZLE } from '../../database/database.module';
 
 const mockFolio = {
@@ -71,6 +72,7 @@ function createMockDb(returnData: any[] = [mockFolio]) {
 }
 
 const mockWebhookService = { emit: vi.fn() };
+const mockTaxService = { calculateTaxes: vi.fn().mockResolvedValue([]) };
 
 describe('FolioService', () => {
   let service: FolioService;
@@ -85,6 +87,7 @@ describe('FolioService', () => {
         FolioService,
         { provide: DRIZZLE, useValue: mockDb },
         { provide: WebhookService, useValue: mockWebhookService },
+        { provide: TaxService, useValue: mockTaxService },
       ],
     }).compile();
 
@@ -125,6 +128,7 @@ describe('FolioService', () => {
           FolioService,
           { provide: DRIZZLE, useValue: emptyDb },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
         ],
       }).compile();
       const svc = module.get<FolioService>(FolioService);
@@ -197,6 +201,7 @@ describe('FolioService', () => {
           FolioService,
           { provide: DRIZZLE, useValue: db },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
         ],
       }).compile();
       const svc = module.get<FolioService>(FolioService);
@@ -213,6 +218,7 @@ describe('FolioService', () => {
           FolioService,
           { provide: DRIZZLE, useValue: db },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
         ],
       }).compile();
       const svc = module.get<FolioService>(FolioService);
@@ -259,6 +265,7 @@ describe('FolioService', () => {
           FolioService,
           { provide: DRIZZLE, useValue: db },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
         ],
       }).compile();
       const svc = module.get<FolioService>(FolioService);
@@ -307,6 +314,7 @@ describe('FolioService', () => {
           FolioService,
           { provide: DRIZZLE, useValue: db },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
         ],
       }).compile();
       const svc = module.get<FolioService>(FolioService);
@@ -321,7 +329,7 @@ describe('FolioService', () => {
         serviceDate: '2026-04-05',
       });
 
-      expect(result).toEqual(mockCharge);
+      expect(result).toEqual(expect.objectContaining({ id: mockCharge.id, type: 'room' }));
       expect(mockWebhookService.emit).toHaveBeenCalledWith(
         'folio.charge_posted',
         'charge',
@@ -377,6 +385,7 @@ describe('FolioService', () => {
           FolioService,
           { provide: DRIZZLE, useValue: db },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: TaxService, useValue: mockTaxService },
         ],
       }).compile();
       const svc = module.get<FolioService>(FolioService);
