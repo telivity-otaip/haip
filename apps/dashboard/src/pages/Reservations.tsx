@@ -558,9 +558,9 @@ function AvailabilityCalendar() {
             </tr>
           </thead>
           <tbody>
-            {(rooms as { id: string; roomNumber: string }[]).map((room, i) => (
+            {(rooms as { id: string; number: string }[]).map((room, i) => (
               <tr key={room.id} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                <td className="px-3 py-2 text-xs font-medium text-telivity-navy sticky left-0 bg-white">{room.roomNumber}</td>
+                <td className="px-3 py-2 text-xs font-medium text-telivity-navy sticky left-0 bg-white">{room.number}</td>
                 {days.map((d) => {
                   const dateStr = format(d, 'yyyy-MM-dd');
                   const res = getResForCell(room.id, dateStr);

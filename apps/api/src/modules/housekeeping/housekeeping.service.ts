@@ -99,10 +99,14 @@ export class HousekeepingService {
     const offset = (page - 1) * limit;
     const whereClause = and(...conditions);
 
-    const [data, countResult] = await Promise.all([
+    const [rows, countResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          task: housekeepingTasks,
+          roomNumber: rooms.number,
+        })
         .from(housekeepingTasks)
+        .leftJoin(rooms, eq(housekeepingTasks.roomId, rooms.id))
         .where(whereClause)
         .orderBy(desc(housekeepingTasks.priority), asc(housekeepingTasks.serviceDate))
         .limit(limit)
@@ -112,6 +116,11 @@ export class HousekeepingService {
         .from(housekeepingTasks)
         .where(whereClause),
     ]);
+
+    const data = rows.map((r: any) => ({
+      ...r.task,
+      roomNumber: r.roomNumber,
+    }));
 
     return {
       data,

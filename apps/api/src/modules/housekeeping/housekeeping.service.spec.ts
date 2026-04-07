@@ -79,6 +79,13 @@ function createMockDb(options: {
             },
             orderBy: vi.fn().mockReturnValue({
               limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockReturnValue({
+                  then: (resolve: any) => {
+                    const result = selectResults[selectCallCount] ?? selectResults[selectResults.length - 1];
+                    selectCallCount++;
+                    resolve(result);
+                  },
+                }),
                 then: (resolve: any) => {
                   const result = selectResults[selectCallCount] ?? selectResults[selectResults.length - 1];
                   selectCallCount++;
@@ -245,17 +252,22 @@ describe('HousekeepingService — CRUD', () => {
 
   it('should list tasks with pagination', async () => {
     const db = createMockDb({ selectResult: [mockTask] });
-    // Override the Promise.all pattern - list uses parallel queries
+    // Override the Promise.all pattern - list uses parallel queries with leftJoin
     db.select = vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockReturnValue({
-              offset: vi.fn().mockReturnValue({
-                then: (resolve: any) => resolve([mockTask]),
+        leftJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockReturnValue({
+                  then: (resolve: any) => resolve([{ task: mockTask, roomNumber: '101' }]),
+                }),
               }),
             }),
+            then: (resolve: any) => resolve([{ count: 1 }]),
           }),
+        }),
+        where: vi.fn().mockReturnValue({
           then: (resolve: any) => resolve([{ count: 1 }]),
         }),
       }),
@@ -355,14 +367,19 @@ describe('HousekeepingService — CRUD', () => {
     const db = createMockDb();
     db.select = vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockReturnValue({
-              offset: vi.fn().mockReturnValue({
-                then: (resolve: any) => resolve([mockTask]),
+        leftJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockReturnValue({
+                  then: (resolve: any) => resolve([{ task: mockTask, roomNumber: '101' }]),
+                }),
               }),
             }),
+            then: (resolve: any) => resolve([{ count: 1 }]),
           }),
+        }),
+        where: vi.fn().mockReturnValue({
           then: (resolve: any) => resolve([{ count: 1 }]),
         }),
       }),
@@ -376,14 +393,19 @@ describe('HousekeepingService — CRUD', () => {
     const db = createMockDb();
     db.select = vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockReturnValue({
-              offset: vi.fn().mockReturnValue({
-                then: (resolve: any) => resolve([mockTask]),
+        leftJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockReturnValue({
+                  then: (resolve: any) => resolve([{ task: mockTask, roomNumber: '101' }]),
+                }),
               }),
             }),
+            then: (resolve: any) => resolve([{ count: 1 }]),
           }),
+        }),
+        where: vi.fn().mockReturnValue({
           then: (resolve: any) => resolve([{ count: 1 }]),
         }),
       }),
@@ -397,14 +419,19 @@ describe('HousekeepingService — CRUD', () => {
     const db = createMockDb();
     db.select = vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue({
-            limit: vi.fn().mockReturnValue({
-              offset: vi.fn().mockReturnValue({
-                then: (resolve: any) => resolve([mockTask]),
+        leftJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockReturnValue({
+                  then: (resolve: any) => resolve([{ task: mockTask, roomNumber: '101' }]),
+                }),
               }),
             }),
+            then: (resolve: any) => resolve([{ count: 1 }]),
           }),
+        }),
+        where: vi.fn().mockReturnValue({
           then: (resolve: any) => resolve([{ count: 1 }]),
         }),
       }),

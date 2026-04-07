@@ -644,10 +644,21 @@ export class ReservationService {
     const whereClause =
       conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [data, countResult] = await Promise.all([
+    const [rows, countResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          reservation: reservations,
+          guestFirstName: guests.firstName,
+          guestLastName: guests.lastName,
+          roomNumber: rooms.number,
+          roomTypeName: roomTypes.name,
+          ratePlanName: ratePlans.name,
+        })
         .from(reservations)
+        .leftJoin(guests, eq(reservations.guestId, guests.id))
+        .leftJoin(rooms, eq(reservations.roomId, rooms.id))
+        .leftJoin(roomTypes, eq(reservations.roomTypeId, roomTypes.id))
+        .leftJoin(ratePlans, eq(reservations.ratePlanId, ratePlans.id))
         .where(whereClause)
         .limit(limit)
         .offset(offset)
@@ -657,6 +668,14 @@ export class ReservationService {
         .from(reservations)
         .where(whereClause),
     ]);
+
+    const data = rows.map((r: any) => ({
+      ...r.reservation,
+      guestName: r.guestFirstName ? `${r.guestFirstName} ${r.guestLastName}` : null,
+      roomNumber: r.roomNumber,
+      roomTypeName: r.roomTypeName,
+      ratePlanName: r.ratePlanName,
+    }));
 
     return {
       data,
