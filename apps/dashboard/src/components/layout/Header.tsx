@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Bell, ChevronDown, Menu } from 'lucide-react';
+import { Bell, ChevronDown, Menu, LogOut, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { useProperty } from '../../context/PropertyContext';
+import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../hooks/useSocket';
 import { api } from '../../lib/api';
 
@@ -17,6 +18,7 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick }: HeaderProps) {
   const { propertyId, setPropertyId } = useProperty();
+  const { user, roles, authEnabled, logout } = useAuth();
   const { connected } = useSocket();
   const [properties, setProperties] = useState<Property[]>([]);
   const [open, setOpen] = useState(false);
@@ -88,6 +90,26 @@ export default function Header({ onMenuClick }: HeaderProps) {
         <button className="relative p-2 rounded-lg hover:bg-telivity-light-grey transition-colors" aria-label="Notifications">
           <Bell size={18} className="text-telivity-slate" />
         </button>
+
+        {authEnabled && user && (
+          <div className="flex items-center gap-2 ml-2 pl-3 border-l border-gray-200">
+            <div className="hidden sm:block text-right">
+              <p className="text-xs font-medium text-telivity-slate">{user.name || user.email}</p>
+              <p className="text-[10px] text-telivity-mid-grey capitalize">
+                {roles.filter(r => !r.startsWith('default-')).join(', ') || 'user'}
+              </p>
+            </div>
+            <User size={16} className="sm:hidden text-telivity-slate" />
+            <button
+              onClick={logout}
+              className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+              aria-label="Logout"
+              title="Logout"
+            >
+              <LogOut size={16} className="text-telivity-mid-grey hover:text-red-600" />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

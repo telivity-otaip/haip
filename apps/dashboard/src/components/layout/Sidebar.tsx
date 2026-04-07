@@ -14,20 +14,31 @@ import {
   Settings,
   X,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
-const NAV_ITEMS = [
+/**
+ * Nav items with optional role restrictions.
+ * If roles is undefined, any authenticated user sees the item.
+ * If roles is specified, user must have at least one matching role.
+ */
+const NAV_ITEMS: Array<{
+  to: string;
+  icon: typeof LayoutDashboard;
+  label: string;
+  roles?: string[];
+}> = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/front-desk', icon: ConciergeBell, label: 'Front Desk' },
-  { to: '/reservations', icon: CalendarDays, label: 'Reservations' },
-  { to: '/guests', icon: Users, label: 'Guests' },
+  { to: '/front-desk', icon: ConciergeBell, label: 'Front Desk', roles: ['admin', 'front_desk'] },
+  { to: '/reservations', icon: CalendarDays, label: 'Reservations', roles: ['admin', 'front_desk', 'readonly'] },
+  { to: '/guests', icon: Users, label: 'Guests', roles: ['admin', 'front_desk', 'readonly'] },
   { to: '/rooms', icon: DoorOpen, label: 'Rooms' },
-  { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping' },
-  { to: '/folios', icon: Receipt, label: 'Folios & Billing' },
-  { to: '/rate-plans', icon: BadgeDollarSign, label: 'Rate Plans' },
-  { to: '/night-audit', icon: Moon, label: 'Night Audit' },
-  { to: '/reports', icon: BarChart3, label: 'Reports' },
-  { to: '/channels', icon: Radio, label: 'Channels' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/housekeeping', icon: Sparkles, label: 'Housekeeping', roles: ['admin', 'housekeeping', 'housekeeping_manager'] },
+  { to: '/folios', icon: Receipt, label: 'Folios & Billing', roles: ['admin', 'front_desk', 'night_auditor', 'readonly'] },
+  { to: '/rate-plans', icon: BadgeDollarSign, label: 'Rate Plans', roles: ['admin', 'front_desk', 'readonly'] },
+  { to: '/night-audit', icon: Moon, label: 'Night Audit', roles: ['admin', 'night_auditor'] },
+  { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'night_auditor', 'readonly'] },
+  { to: '/channels', icon: Radio, label: 'Channels', roles: ['admin'] },
+  { to: '/settings', icon: Settings, label: 'Settings', roles: ['admin'] },
 ];
 
 interface SidebarProps {
@@ -36,6 +47,12 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
+  const { hasRole } = useAuth();
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.roles || hasRole(...item.roles),
+  );
+
   return (
     <>
       {/* Mobile overlay */}
@@ -69,7 +86,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-3" role="navigation" aria-label="Main navigation">
-          {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+          {visibleItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
