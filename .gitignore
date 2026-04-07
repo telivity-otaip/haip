@@ -30,8 +30,10 @@ docker-data/
 # Drizzle
 drizzle/meta/
 
-# Research (never commit)
-kb/research/raw/
+# Proprietary — do not commit
+kb/
+briefs/
+instructions/
 
 # Logs
 *.log
