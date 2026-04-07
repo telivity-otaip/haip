@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { ChannelService } from './channel.service';
 import { AriService } from './ari.service';
 import { InboundReservationService } from './inbound-reservation.service';
@@ -22,6 +23,7 @@ import { StopSellDto } from './dto/stop-sell.dto';
 
 @ApiTags('Channel Manager')
 @Controller('channels')
+@Roles('admin')
 export class ChannelController {
   constructor(
     private readonly channelService: ChannelService,

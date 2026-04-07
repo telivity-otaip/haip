@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { RatePlanService } from './rate-plan.service';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';
@@ -30,6 +31,7 @@ export class RatePlanController {
   }
 
   @Post()
+  @Roles('admin')
   @ApiOperation({ summary: 'Create new rate plan' })
   @ApiResponse({ status: 201, description: 'Rate plan created' })
   createRatePlan(@Body() dto: CreateRatePlanDto) {
@@ -52,6 +54,7 @@ export class RatePlanController {
   }
 
   @Patch(':id')
+  @Roles('admin')
   @ApiOperation({ summary: 'Update rate plan' })
   @ApiResponse({ status: 200, description: 'Rate plan updated' })
   @ApiResponse({ status: 404, description: 'Rate plan not found' })
@@ -72,6 +75,7 @@ export class RatePlanController {
   }
 
   @Post(':id/restrictions')
+  @Roles('admin')
   @ApiOperation({ summary: 'Create restriction for a rate plan' })
   @ApiResponse({ status: 201, description: 'Restriction created' })
   createRestriction(
@@ -82,6 +86,7 @@ export class RatePlanController {
   }
 
   @Patch(':id/restrictions/:restrictionId')
+  @Roles('admin')
   @ApiOperation({ summary: 'Update a rate restriction' })
   @ApiResponse({ status: 200, description: 'Restriction updated' })
   @ApiResponse({ status: 404, description: 'Restriction not found' })
@@ -94,6 +99,7 @@ export class RatePlanController {
   }
 
   @Delete(':id/restrictions/:restrictionId')
+  @Roles('admin')
   @ApiOperation({ summary: 'Delete a rate restriction' })
   @ApiResponse({ status: 200, description: 'Restriction deleted' })
   @ApiResponse({ status: 404, description: 'Restriction not found' })

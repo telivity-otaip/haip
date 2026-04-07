@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { GuestService } from './guest.service';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
@@ -36,6 +37,7 @@ export class GuestController {
   }
 
   @Post()
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Create new guest profile' })
   @ApiResponse({ status: 201, description: 'Guest created' })
   createGuest(@Body() dto: CreateGuestDto) {
@@ -43,6 +45,7 @@ export class GuestController {
   }
 
   @Patch(':id')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Update guest profile' })
   @ApiResponse({ status: 200, description: 'Guest updated' })
   @ApiResponse({ status: 404, description: 'Guest not found' })
@@ -54,6 +57,7 @@ export class GuestController {
   }
 
   @Delete(':id')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Delete guest profile (GDPR right to erasure)' })
   @ApiResponse({ status: 200, description: 'Guest deleted' })
   @ApiResponse({ status: 404, description: 'Guest not found' })

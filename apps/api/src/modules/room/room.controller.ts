@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { RoomService } from './room.service';
 import { RoomStatusService } from './room-status.service';
 import { CreateRoomTypeDto } from './dto/create-room-type.dto';
@@ -35,6 +36,7 @@ export class RoomController {
   }
 
   @Post('types')
+  @Roles('admin', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Create new room type' })
   @ApiResponse({ status: 201, description: 'Room type created' })
   createRoomType(@Body() dto: CreateRoomTypeDto) {
@@ -86,6 +88,7 @@ export class RoomController {
   }
 
   @Post()
+  @Roles('admin', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Create new room' })
   @ApiResponse({ status: 201, description: 'Room created' })
   createRoom(@Body() dto: CreateRoomDto) {
@@ -101,6 +104,7 @@ export class RoomController {
   }
 
   @Patch(':id/status')
+  @Roles('admin', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Update room status with transition validation' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room status updated' })
@@ -114,6 +118,7 @@ export class RoomController {
   }
 
   @Patch(':id')
+  @Roles('admin', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Update room' })
   @ApiResponse({ status: 200, description: 'Room updated' })
   @ApiResponse({ status: 404, description: 'Room not found' })

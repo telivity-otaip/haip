@@ -12,6 +12,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { HousekeepingService } from './housekeeping.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -51,6 +52,7 @@ export class HousekeepingController {
   }
 
   @Post('/generate-stayover-tasks')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Generate stayover tasks for occupied rooms' })
   generateStayoverTasks(
     @Body() body: { propertyId: string; serviceDate: string },
@@ -59,12 +61,14 @@ export class HousekeepingController {
   }
 
   @Post('/auto-assign')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Auto-assign pending tasks to housekeepers' })
   autoAssign(@Body() dto: AutoAssignDto) {
     return this.housekeepingService.autoAssign(dto);
   }
 
   @Post('/tasks')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Create housekeeping task' })
   @HttpCode(HttpStatus.CREATED)
   createTask(@Body() dto: CreateTaskDto) {
@@ -88,6 +92,7 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/assign')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Assign task to housekeeper' })
   @ApiQuery({ name: 'propertyId', type: String })
   assignTask(
@@ -99,6 +104,7 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/start')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Start assigned task' })
   @ApiQuery({ name: 'propertyId', type: String })
   startTask(
@@ -109,6 +115,7 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/unassign')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Unassign task' })
   @ApiQuery({ name: 'propertyId', type: String })
   unassignTask(
@@ -119,6 +126,7 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/complete')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Complete housekeeping task' })
   @ApiQuery({ name: 'propertyId', type: String })
   completeTask(
@@ -130,6 +138,7 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/inspect')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Inspect completed task' })
   @ApiQuery({ name: 'propertyId', type: String })
   inspectTask(
@@ -141,6 +150,7 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id/skip')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Skip housekeeping task' })
   @ApiQuery({ name: 'propertyId', type: String })
   skipTask(
@@ -152,6 +162,7 @@ export class HousekeepingController {
   }
 
   @Patch('/tasks/:id')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Update housekeeping task' })
   @ApiQuery({ name: 'propertyId', type: String })
   updateTask(
@@ -163,6 +174,7 @@ export class HousekeepingController {
   }
 
   @Delete('/tasks/:id')
+  @Roles('admin', 'housekeeping', 'housekeeping_manager')
   @ApiOperation({ summary: 'Delete housekeeping task' })
   @ApiQuery({ name: 'propertyId', type: String })
   @HttpCode(HttpStatus.NO_CONTENT)

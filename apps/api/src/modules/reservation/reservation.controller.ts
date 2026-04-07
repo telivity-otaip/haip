@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { ReservationService } from './reservation.service';
 import { AvailabilityService } from './availability.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
@@ -32,6 +33,7 @@ export class ReservationController {
   // --- Action routes BEFORE :id to avoid conflicts ---
 
   @Post('search-availability')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Search room availability for a date range' })
   @ApiResponse({ status: 200, description: 'Availability results' })
   searchAvailability(@Body() dto: SearchAvailabilityDto) {
@@ -44,6 +46,7 @@ export class ReservationController {
   }
 
   @Post('group-check-in')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Batch check-in for group reservations' })
   @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Group check-in results (partial success allowed)' })
@@ -64,6 +67,7 @@ export class ReservationController {
   }
 
   @Post()
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Create new reservation (status: pending)' })
   @ApiResponse({ status: 201, description: 'Reservation created' })
   createReservation(@Body() dto: CreateReservationDto) {
@@ -79,6 +83,7 @@ export class ReservationController {
   }
 
   @Patch(':id')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Modify reservation (dates, room type, rate, occupancy)' })
   @ApiResponse({ status: 200, description: 'Reservation modified' })
   @ApiResponse({ status: 404, description: 'Reservation not found' })
@@ -92,6 +97,7 @@ export class ReservationController {
   // --- Lifecycle transition routes ---
 
   @Patch(':id/confirm')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Confirm reservation' })
   @ApiResponse({ status: 200, description: 'Reservation confirmed' })
   confirmReservation(@Param('id', ParseUUIDPipe) id: string) {
@@ -99,6 +105,7 @@ export class ReservationController {
   }
 
   @Patch(':id/assign-room')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Assign specific room to reservation' })
   @ApiResponse({ status: 200, description: 'Room assigned' })
   assignRoom(
@@ -109,6 +116,7 @@ export class ReservationController {
   }
 
   @Patch(':id/cancel')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Cancel reservation with optional reason' })
   @ApiResponse({ status: 200, description: 'Reservation cancelled' })
   cancelReservation(
@@ -119,6 +127,7 @@ export class ReservationController {
   }
 
   @Patch(':id/no-show')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Mark reservation as no-show' })
   @ApiResponse({ status: 200, description: 'Reservation marked as no-show' })
   markNoShow(@Param('id', ParseUUIDPipe) id: string) {
@@ -126,6 +135,7 @@ export class ReservationController {
   }
 
   @Patch(':id/check-in')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Check in reservation with optional ID capture, deposit auth, room override' })
   @ApiResponse({ status: 200, description: 'Guest checked in' })
   checkIn(
@@ -136,6 +146,7 @@ export class ReservationController {
   }
 
   @Patch(':id/check-out')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Check out reservation with optional express checkout and late fee' })
   @ApiResponse({ status: 200, description: 'Guest checked out' })
   checkOut(
@@ -146,6 +157,7 @@ export class ReservationController {
   }
 
   @Post(':id/express-checkout')
+  @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Express checkout — auto-capture deposits and settle' })
   @ApiResponse({ status: 200, description: 'Express checkout completed' })
   expressCheckOut(@Param('id', ParseUUIDPipe) id: string) {

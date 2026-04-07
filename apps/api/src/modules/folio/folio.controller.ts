@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { FolioService } from './folio.service';
 import { FolioRoutingService } from './folio-routing.service';
 import { CreateFolioDto } from './dto/create-folio.dto';
@@ -28,6 +29,7 @@ export class FolioController {
   ) {}
 
   @Post()
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Create a folio' })
   @ApiResponse({ status: 201, description: 'Folio created' })
   createFolio(@Body() dto: CreateFolioDto) {
@@ -54,6 +56,7 @@ export class FolioController {
   }
 
   @Patch(':id')
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Update folio' })
   @ApiResponse({ status: 200, description: 'Folio updated' })
   @ApiResponse({ status: 404, description: 'Folio not found' })
@@ -67,6 +70,7 @@ export class FolioController {
   }
 
   @Patch(':id/settle')
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Settle folio (balance must be zero)' })
   @ApiResponse({ status: 200, description: 'Folio settled' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -78,6 +82,7 @@ export class FolioController {
   }
 
   @Patch(':id/close')
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Close folio (must be settled first)' })
   @ApiResponse({ status: 200, description: 'Folio closed' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -89,6 +94,7 @@ export class FolioController {
   }
 
   @Post(':id/charges')
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Post charge to folio' })
   @ApiResponse({ status: 201, description: 'Charge posted' })
   postCharge(
@@ -109,6 +115,7 @@ export class FolioController {
   }
 
   @Post(':id/charges/:chargeId/reverse')
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Reverse a charge' })
   @ApiResponse({ status: 200, description: 'Charge reversed' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -121,6 +128,7 @@ export class FolioController {
   }
 
   @Post(':id/charges/lock')
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Lock charges up to audit date' })
   @ApiResponse({ status: 200, description: 'Charges locked' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -133,6 +141,7 @@ export class FolioController {
   }
 
   @Post(':id/transfer-charge')
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Transfer charge to another folio' })
   @ApiResponse({ status: 200, description: 'Charge transferred' })
   @ApiQuery({ name: 'propertyId', type: String })
@@ -145,6 +154,7 @@ export class FolioController {
   }
 
   @Post(':id/transfer-to-city-ledger')
+  @Roles('admin', 'front_desk', 'night_auditor')
   @ApiOperation({ summary: 'Transfer outstanding balance to city ledger' })
   @ApiResponse({ status: 200, description: 'Balance transferred to city ledger' })
   @ApiQuery({ name: 'propertyId', type: String })

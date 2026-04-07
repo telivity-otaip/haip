@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { PropertyService } from './property.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
@@ -33,6 +34,7 @@ export class PropertyController {
   }
 
   @Post()
+  @Roles('admin')
   @ApiOperation({ summary: 'Create new property' })
   @ApiResponse({ status: 201, description: 'Property created' })
   createProperty(@Body() dto: CreatePropertyDto) {
@@ -40,6 +42,7 @@ export class PropertyController {
   }
 
   @Patch(':id')
+  @Roles('admin')
   @ApiOperation({ summary: 'Update property' })
   @ApiResponse({ status: 200, description: 'Property updated' })
   @ApiResponse({ status: 404, description: 'Property not found' })

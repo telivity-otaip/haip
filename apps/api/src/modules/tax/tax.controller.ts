@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
 import { TaxService } from './tax.service';
 import { CreateTaxProfileDto } from './dto/create-tax-profile.dto';
 import { UpdateTaxProfileDto } from './dto/update-tax-profile.dto';
@@ -30,6 +31,7 @@ export class TaxController {
   }
 
   @Post('profiles')
+  @Roles('admin')
   @ApiOperation({ summary: 'Create a tax profile' })
   createProfile(@Body() dto: CreateTaxProfileDto) {
     return this.taxService.createProfile(dto);
@@ -42,6 +44,7 @@ export class TaxController {
   }
 
   @Patch('profiles/:id')
+  @Roles('admin')
   @ApiOperation({ summary: 'Update a tax profile' })
   updateProfile(
     @Param('id') id: string,
@@ -54,6 +57,7 @@ export class TaxController {
   // --- Tax Rules ---
 
   @Post('profiles/:profileId/rules')
+  @Roles('admin')
   @ApiOperation({ summary: 'Add a tax rule to a profile' })
   createRule(
     @Param('profileId') profileId: string,
@@ -64,6 +68,7 @@ export class TaxController {
   }
 
   @Patch('profiles/:profileId/rules/:ruleId')
+  @Roles('admin')
   @ApiOperation({ summary: 'Update a tax rule' })
   updateRule(
     @Param('profileId') profileId: string,
@@ -75,6 +80,7 @@ export class TaxController {
   }
 
   @Delete('profiles/:profileId/rules/:ruleId')
+  @Roles('admin')
   @ApiOperation({ summary: 'Delete a tax rule' })
   deleteRule(
     @Param('profileId') profileId: string,

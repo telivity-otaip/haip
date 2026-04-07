@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { Public } from '../auth/public.decorator';
 import { ConnectSearchService } from './connect-search.service';
 import { ConnectContentService } from './connect-content.service';
 import { ConnectBookingService } from './connect-booking.service';
@@ -22,6 +23,7 @@ import { CreateSubscriptionDto } from './dto/agent-event-subscription.dto';
 
 @ApiTags('Connect — OTAIP Agent API')
 @Controller('api/v1/connect')
+@Public()
 export class ConnectController {
   constructor(
     private readonly searchService: ConnectSearchService,
