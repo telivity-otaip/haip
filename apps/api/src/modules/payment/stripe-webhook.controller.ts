@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
+import { Public } from '../auth/public.decorator';
 import { eq } from 'drizzle-orm';
 import { payments } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -50,6 +51,7 @@ export class StripeWebhookController {
     }
   }
 
+  @Public()
   @Post()
   @ApiExcludeEndpoint() // Hide from Swagger — this is for Stripe only
   async handleWebhook(@Req() req: any, @Res() res: any) {

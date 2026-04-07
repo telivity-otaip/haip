@@ -20,6 +20,7 @@ import { ChannelModule } from './modules/channel/channel.module';
 import { ConnectModule } from './modules/connect/connect.module';
 import { EventsModule } from './modules/events/events.module';
 import { TaxModule } from './modules/tax/tax.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -44,6 +45,7 @@ const imports: any[] = [
   ConnectModule,
   EventsModule,
   TaxModule,
+  AuthModule,
 ];
 
 // Serve dashboard static files in production

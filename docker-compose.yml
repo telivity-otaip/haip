@@ -13,6 +13,7 @@ services:
       - '5432:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./keycloak/init-keycloak-db.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U haip']
       interval: 5s
@@ -33,6 +34,33 @@ services:
       timeout: 5s
       retries: 5
 
+  # Keycloak — OIDC provider for authentication & RBAC
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: haip-keycloak
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: haip
+      KC_DB_PASSWORD: haip
+      KC_HEALTH_ENABLED: 'true'
+    volumes:
+      - ./keycloak/haip-realm.json:/opt/keycloak/data/import/haip-realm.json:ro
+    ports:
+      - '8080:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'exec 3<>/dev/tcp/localhost/8080 && echo -e "GET /health/ready HTTP/1.1\r\nHost: localhost\r\n\r\n" >&3 && cat <&3 | grep -q "UP"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   # HAIP API
   api:
     build:
@@ -47,6 +75,10 @@ services:
       STRIPE_MODE: mock
       # STRIPE_SECRET_KEY:
       # STRIPE_WEBHOOK_SECRET:
+      AUTH_ENABLED: 'false'
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: haip
+      KEYCLOAK_CLIENT_ID: haip-api
     ports:
       - '3000:3000'
     depends_on:

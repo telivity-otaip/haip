@@ -1,0 +1,149 @@
+{
+  "realm": "haip",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Property owner / GM — full access" },
+      { "name": "front_desk", "description": "Front desk agent — reservations, check-in/out, guests, folios" },
+      { "name": "housekeeping", "description": "Housekeeping staff — own task assignments, room status" },
+      { "name": "housekeeping_manager", "description": "Head housekeeper — all housekeeping, assignments, analytics" },
+      { "name": "night_auditor", "description": "Night audit operator — night audit, reports, folio review" },
+      { "name": "readonly", "description": "View-only / reporting — all read endpoints" }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "haip-api",
+      "name": "HAIP API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "300"
+      }
+    },
+    {
+      "clientId": "haip-dashboard",
+      "name": "HAIP Dashboard",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "rootUrl": "http://localhost:5173",
+      "baseUrl": "/",
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "300"
+      }
+    }
+  ],
+
+  "users": [
+    {
+      "username": "admin@telivity.com",
+      "email": "admin@telivity.com",
+      "firstName": "Admin",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "frontdesk@telivity.com",
+      "email": "frontdesk@telivity.com",
+      "firstName": "Front",
+      "lastName": "Desk",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "frontdesk123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["front_desk"]
+    },
+    {
+      "username": "housekeeper@telivity.com",
+      "email": "housekeeper@telivity.com",
+      "firstName": "House",
+      "lastName": "Keeper",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "housekeeper123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["housekeeping"]
+    },
+    {
+      "username": "manager@telivity.com",
+      "email": "manager@telivity.com",
+      "firstName": "HK",
+      "lastName": "Manager",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "manager123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["housekeeping_manager", "night_auditor"]
+    },
+    {
+      "username": "viewer@telivity.com",
+      "email": "viewer@telivity.com",
+      "firstName": "View",
+      "lastName": "Only",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["readonly"]
+    }
+  ]
+}
