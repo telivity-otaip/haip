@@ -9,11 +9,15 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
     },
     "./schema": {
       "types": "./dist/schema/index.d.ts",
-      "import": "./dist/schema/index.js"
+      "import": "./dist/schema/index.js",
+      "require": "./dist/schema/index.cjs",
+      "default": "./dist/schema/index.js"
     }
   },
   "scripts": {
@@ -24,6 +28,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage",
+    "seed": "tsx src/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"
@@ -34,6 +39,8 @@
   },
   "devDependencies": {
     "drizzle-kit": "^0.30.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
     "tsup": "^8.3.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0",

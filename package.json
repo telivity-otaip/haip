@@ -16,6 +16,7 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "test:coverage": "pnpm -r run test:coverage",
+    "seed": "pnpm --filter @haip/database run seed",
     "db:generate": "pnpm --filter @haip/database run db:generate",
     "db:migrate": "pnpm --filter @haip/database run db:migrate",
     "db:studio": "pnpm --filter @haip/database run db:studio",
