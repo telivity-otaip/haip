@@ -655,6 +655,85 @@ async function main() {
   ]);
 
   // -----------------------------------------------------------------------
+  // 12. Tax Profile — Barcelona (IVA 10% + Tourist Tax €3.50/night, max 7 nights)
+  // -----------------------------------------------------------------------
+  const barcelonaTaxProfileId = sid('a5000001', 2);
+
+  await db.insert(schema.taxProfiles).values({
+    id: barcelonaTaxProfileId,
+    propertyId,
+    name: 'Barcelona Tax Profile',
+    jurisdictionCode: 'ES-CT-BARCELONA',
+    isActive: true,
+    effectiveFrom: '2024-01-01',
+  });
+
+  await db.insert(schema.taxRules).values([
+    {
+      id: sid('a5200001', 1),
+      taxProfileId: barcelonaTaxProfileId,
+      name: 'IVA (Spanish VAT)',
+      code: 'ES_IVA',
+      type: 'percentage',
+      rate: '10.0000',
+      appliesToChargeTypes: ['room'],
+      sortOrder: 1,
+      effectiveFrom: '2024-01-01',
+    },
+    {
+      id: sid('a5200001', 2),
+      taxProfileId: barcelonaTaxProfileId,
+      name: 'Tourist Tax (Barcelona)',
+      code: 'BCN_TOURIST',
+      type: 'flat_per_night',
+      rate: '3.5000',
+      appliesToChargeTypes: ['room'],
+      exemptions: { maxNights: 7 },
+      sortOrder: 2,
+      effectiveFrom: '2024-01-01',
+    },
+  ]);
+
+  // -----------------------------------------------------------------------
+  // 13. Tax Profile — Amsterdam (BTW 9% + Tourist Tax 7%)
+  // -----------------------------------------------------------------------
+  const amsterdamTaxProfileId = sid('a5000001', 3);
+
+  await db.insert(schema.taxProfiles).values({
+    id: amsterdamTaxProfileId,
+    propertyId,
+    name: 'Amsterdam Tax Profile',
+    jurisdictionCode: 'NL-NH-AMSTERDAM',
+    isActive: false, // inactive — only one profile active per property
+    effectiveFrom: '2024-01-01',
+  });
+
+  await db.insert(schema.taxRules).values([
+    {
+      id: sid('a5300001', 1),
+      taxProfileId: amsterdamTaxProfileId,
+      name: 'BTW (Dutch VAT)',
+      code: 'NL_BTW',
+      type: 'percentage',
+      rate: '9.0000',
+      appliesToChargeTypes: ['room'],
+      sortOrder: 1,
+      effectiveFrom: '2024-01-01',
+    },
+    {
+      id: sid('a5300001', 2),
+      taxProfileId: amsterdamTaxProfileId,
+      name: 'Tourist Tax (Amsterdam)',
+      code: 'AMS_TOURIST',
+      type: 'percentage',
+      rate: '7.0000',
+      appliesToChargeTypes: ['room'],
+      sortOrder: 2,
+      effectiveFrom: '2024-01-01',
+    },
+  ]);
+
+  // -----------------------------------------------------------------------
   // Done
   // -----------------------------------------------------------------------
   console.log('Seed complete.');
@@ -669,7 +748,7 @@ async function main() {
   console.log('  Night Audit:   1 completed run');
   console.log('  Channels:      2 connections');
   console.log('  Webhooks:      1 subscription');
-  console.log('  Tax Profile:   Miami Beach (FL Sales 6% + Surtax 1% + TDT 6% = 13%)');
+  console.log('  Tax Profiles:  3 (Miami Beach 13%, Barcelona IVA+tourist, Amsterdam BTW+tourist)');
 
   await client.end();
 }
