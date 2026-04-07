@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { PropertyModule } from './modules/property/property.module';
@@ -18,29 +20,39 @@ import { ChannelModule } from './modules/channel/channel.module';
 import { ConnectModule } from './modules/connect/connect.module';
 import { EventsModule } from './modules/events/events.module';
 
-@Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+const imports: any[] = [
+  ConfigModule.forRoot({
+    isGlobal: true,
+    envFilePath: ['.env.local', '.env'],
+  }),
+  EventEmitterModule.forRoot(),
+  DatabaseModule,
+  HealthModule,
+  PropertyModule,
+  RoomModule,
+  GuestModule,
+  ReservationModule,
+  FolioModule,
+  RatePlanModule,
+  PaymentModule,
+  HousekeepingModule,
+  NightAuditModule,
+  ReportsModule,
+  WebhookModule,
+  ChannelModule,
+  ConnectModule,
+  EventsModule,
+];
+
+// Serve dashboard static files in production
+if (process.env['NODE_ENV'] === 'production') {
+  imports.push(
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', 'dashboard', 'dist'),
+      exclude: ['/api/(.*)'],
     }),
-    EventEmitterModule.forRoot(),
-    DatabaseModule,
-    HealthModule,
-    PropertyModule,
-    RoomModule,
-    GuestModule,
-    ReservationModule,
-    FolioModule,
-    RatePlanModule,
-    PaymentModule,
-    HousekeepingModule,
-    NightAuditModule,
-    ReportsModule,
-    WebhookModule,
-    ChannelModule,
-    ConnectModule,
-    EventsModule,
-  ],
-})
+  );
+}
+
+@Module({ imports })
 export class AppModule {}

@@ -7,6 +7,7 @@ WORKDIR /app
 # Install dependencies
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/api/package.json ./apps/api/
+COPY apps/dashboard/package.json ./apps/dashboard/
 COPY packages/database/package.json ./packages/database/
 COPY packages/shared/package.json* ./packages/shared/
 
@@ -16,9 +17,16 @@ RUN pnpm install --frozen-lockfile || pnpm install
 COPY tsconfig.base.json ./
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
+COPY apps/dashboard/ ./apps/dashboard/
 
-# Build
+# Build workspace packages
+RUN pnpm --filter @haip/shared run build
 RUN pnpm --filter @haip/database run build
+
+# Build dashboard (Vite static output)
+RUN pnpm --filter dashboard run build
+
+# Build API (NestJS)
 RUN pnpm --filter @haip/api run build
 
 # Production stage
@@ -33,9 +41,14 @@ COPY --from=base /app/node_modules ./node_modules
 COPY --from=base /app/apps/api/dist ./apps/api/dist
 COPY --from=base /app/apps/api/package.json ./apps/api/
 COPY --from=base /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=base /app/apps/dashboard/dist ./apps/dashboard/dist
 COPY --from=base /app/packages/database/dist ./packages/database/dist
 COPY --from=base /app/packages/database/package.json ./packages/database/
+COPY --from=base /app/packages/shared/dist ./packages/shared/dist
+COPY --from=base /app/packages/shared/package.json ./packages/shared/
 
 ENV NODE_ENV=production
+
+EXPOSE 3000
 
 CMD ["node", "apps/api/dist/main.js"]

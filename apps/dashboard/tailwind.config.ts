@@ -29,6 +29,20 @@ export default {
       fontFamily: {
         sans: ['Montserrat', 'Arial', 'Helvetica', 'sans-serif'],
       },
+      keyframes: {
+        'slide-in': {
+          from: { opacity: '0', transform: 'translateX(100%)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        'pulse-skeleton': {
+          '0%, 100%': { opacity: '0.4' },
+          '50%': { opacity: '0.7' },
+        },
+      },
+      animation: {
+        'slide-in': 'slide-in 0.2s ease-out',
+        'skeleton': 'pulse-skeleton 1.5s ease-in-out infinite',
+      },
     },
   },
   plugins: [],
