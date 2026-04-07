@@ -360,8 +360,6 @@ haip/
 │   ├── database/                   # Drizzle ORM schema + migrations
 │   │   └── src/schema/             # 10 table files (property, room, guest, etc.)
 │   └── shared/                     # Shared types, enums, constants
-├── kb/                             # Domain knowledge base (hotel operations truth)
-├── briefs/                         # Build briefs (implementation specs)
 ├── docker-compose.yml              # PostgreSQL + Redis + API
 ├── CLAUDE.md                       # AI agent constitution
 └── .env.example                    # Environment template
@@ -616,7 +614,7 @@ HAIP is built in public and contributions are welcome.
 
 ### The One Rule
 
-**DO NOT INVENT HOTEL DOMAIN LOGIC.** All hotel domain knowledge comes from the knowledge base (`kb/HAIP_KNOWLEDGE_BASE.md`). If something is ambiguous or missing, open an issue. Don't guess — hotels are weirder than you think.
+**DO NOT INVENT HOTEL DOMAIN LOGIC.** All hotel domain knowledge must be researched and verified. Do not invent hotel operations logic. If unsure, open an issue. Don't guess — hotels are weirder than you think.
 
 ### How to contribute
 
