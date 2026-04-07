@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { eq, and, sql, desc, asc, inArray } from 'drizzle-orm';
+import { eq, and, sql, desc, asc, inArray, gte, lt } from 'drizzle-orm';
 import { housekeepingTasks, rooms, reservations, guests, properties, roomTypes } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService, type WebhookPayload } from '../webhook/webhook.service';
@@ -91,7 +91,13 @@ export class HousekeepingService {
     if (dto.status) conditions.push(eq(housekeepingTasks.status, dto.status as any));
     if (dto.type) conditions.push(eq(housekeepingTasks.type, dto.type as any));
     if (dto.assignedTo) conditions.push(eq(housekeepingTasks.assignedTo, dto.assignedTo));
-    if (dto.serviceDate) conditions.push(eq(housekeepingTasks.serviceDate, new Date(dto.serviceDate)));
+    if (dto.serviceDate) {
+      const dayStart = new Date(dto.serviceDate + 'T00:00:00');
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      conditions.push(gte(housekeepingTasks.serviceDate, dayStart));
+      conditions.push(lt(housekeepingTasks.serviceDate, dayEnd));
+    }
     if (dto.roomId) conditions.push(eq(housekeepingTasks.roomId, dto.roomId));
 
     const page = dto.page ?? 1;
