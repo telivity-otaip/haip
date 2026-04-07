@@ -54,3 +54,14 @@ export {
   auditRuns,
   auditLogs,
 } from './audit.js';
+
+// Channel Manager
+export {
+  channelStatusEnum,
+  syncDirectionEnum,
+  channelConnections,
+  ariSyncLogs,
+} from './channel.js';
+
+// Connect / Agent Subscriptions
+export { agentWebhookSubscriptions } from './connect.js';

@@ -33,6 +33,19 @@ export const WEBHOOK_EVENTS = {
   // Night audit events
   'audit.started': 'audit.started',
   'audit.completed': 'audit.completed',
+
+  // Channel manager events
+  'channel.connected': 'channel.connected',
+  'channel.disconnected': 'channel.disconnected',
+  'channel.sync_completed': 'channel.sync_completed',
+  'channel.sync_failed': 'channel.sync_failed',
+  'channel.reservation_received': 'channel.reservation_received',
+
+  // Connect/Agent events
+  'connect.booking_created': 'connect.booking_created',
+  'connect.booking_modified': 'connect.booking_modified',
+  'connect.booking_cancelled': 'connect.booking_cancelled',
+  'connect.subscription_created': 'connect.subscription_created',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;

@@ -14,6 +14,9 @@ import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { NightAuditModule } from './modules/night-audit/night-audit.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
+import { ChannelModule } from './modules/channel/channel.module';
+import { ConnectModule } from './modules/connect/connect.module';
+import { EventsModule } from './modules/events/events.module';
 
 @Module({
   imports: [
@@ -35,6 +38,9 @@ import { WebhookModule } from './modules/webhook/webhook.module';
     NightAuditModule,
     ReportsModule,
     WebhookModule,
+    ChannelModule,
+    ConnectModule,
+    EventsModule,
   ],
 })
 export class AppModule {}

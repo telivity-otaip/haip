@@ -1,6 +1,6 @@
 # HAIP — Build Plan
 
-> Updated April 5, 2026 with domain research findings from 3 parallel agents.
+> Updated April 6, 2026 — Phase 7 complete. Competitive milestone reached.
 > Name: HAIP (Hotel AI Platform). Separate repo from OTAIP.
 
 ---
@@ -284,6 +284,25 @@ Based on 12 domain questions answered by research agents:
 8. **Revenue management + channel distribution is existential** — Dušan: "that's where they live or die." RMS data feeds and channel distribution should be elevated to Phase 1-2 priority, not Phase 6 afterthought.
 8. **Apaleo Agent Hub is still experimental** — 4 agents, no scaling data. Don't make agents the core selling point. PMS must stand alone.
 9. **Community building is a moat** — No dominant open-source hotel tech community exists. "Hotel Tech Builders" Discord + weekly calls could differentiate.
+
+## PHASE COMPLETION LOG
+
+| Phase | Status | Date | Tests | Key Stats |
+|-------|--------|------|-------|-----------|
+| 0. Scaffolding | ✅ Complete | Apr 5 | 13 | Monorepo, schema, CI |
+| 1. Reservations | ✅ Complete | Apr 5 | 73 | State machine, availability, rates |
+| 2. Billing | ✅ Complete | Apr 5 | 73 | Folio, charges, Stripe tokenization |
+| 3. Front Desk | ✅ Complete | Apr 6 | 122 | Check-in/out, express, groups |
+| 4. Housekeeping | ✅ Complete | Apr 6 | 168 | Tasks, checklists, inspection flow |
+| 5. Night Audit | ✅ Complete | Apr 6 | 197 | 12-step audit, reports, RevPAR/ADR |
+| 6. Channel Manager | ✅ Complete | Apr 6 | 239 | ChannelAdapter, ARI push, rate parity |
+| 7. OTAIP Agent Layer | ✅ Complete | Apr 6 | 281 | Connect API (16 endpoints), insights |
+| 8. Admin UI | ⏳ Next | — | — | React dashboard |
+
+**MVP Milestone (Phases 0-5): ✅ REACHED — Apr 6, 2026**
+**Competitive Milestone (Phases 0-7): ✅ REACHED — Apr 6, 2026**
+
+---
 
 ## ALL DECISIONS FINALIZED (April 5, 2026)
 
