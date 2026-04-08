@@ -46,6 +46,13 @@ export const WEBHOOK_EVENTS = {
   'connect.booking_modified': 'connect.booking_modified',
   'connect.booking_cancelled': 'connect.booking_cancelled',
   'connect.subscription_created': 'connect.subscription_created',
+
+  // AI Agent events
+  'agent.run_completed': 'agent.run_completed',
+  'agent.decision_created': 'agent.decision_created',
+  'agent.decision_executed': 'agent.decision_executed',
+  'agent.training_completed': 'agent.training_completed',
+  'rate.ai_adjusted': 'rate.ai_adjusted',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;

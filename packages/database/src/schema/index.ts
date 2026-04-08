@@ -72,3 +72,13 @@ export {
   taxRuleTypeEnum,
   taxRules,
 } from './tax.js';
+
+// AI Agents
+export {
+  agentTypeEnum,
+  agentModeEnum,
+  agentDecisionStatusEnum,
+  agentConfigs,
+  agentDecisions,
+  agentTrainingSnapshots,
+} from './agent.js';
