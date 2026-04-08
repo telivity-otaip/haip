@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Percent,
@@ -10,6 +11,7 @@ import {
   LogOut,
   Users,
   DoorOpen,
+  Brain,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { format } from 'date-fns';
@@ -42,6 +44,7 @@ interface ActivityEvent {
 
 export default function Dashboard() {
   const { propertyId } = useProperty();
+  const navigate = useNavigate();
   const today = format(new Date(), 'yyyy-MM-dd');
 
   const { data: financial } = useQuery({
@@ -77,6 +80,12 @@ export default function Dashboard() {
   const { data: inHouse } = useQuery({
     queryKey: ['reservations', 'in-house', propertyId],
     queryFn: () => api.get('/v1/reservations', { params: { propertyId, status: 'checked_in' } }).then((r) => r.data),
+    enabled: !!propertyId,
+  });
+
+  const { data: agentStatuses } = useQuery({
+    queryKey: ['agents', propertyId],
+    queryFn: () => api.get(`/v1/agents/${propertyId}`).then((r) => r.data?.data ?? r.data ?? []),
     enabled: !!propertyId,
   });
 
@@ -231,6 +240,29 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Revenue Intelligence Card */}
+      {Array.isArray(agentStatuses) && agentStatuses.length > 0 && (
+        <div
+          className="bg-white rounded-xl shadow-sm p-5 mb-6 cursor-pointer hover:ring-2 hover:ring-telivity-teal/30 transition-all"
+          onClick={() => navigate('/revenue')}
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-telivity-teal/10 rounded-lg">
+              <Brain size={20} className="text-telivity-teal" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold text-telivity-navy">Revenue Intelligence</h2>
+              <p className="text-xs text-telivity-mid-grey mt-0.5">
+                {agentStatuses.filter((a: any) => a.isEnabled).length} agents active
+                {' | '}
+                {agentStatuses.reduce((s: number, a: any) => s + (a.pendingDecisions ?? 0), 0)} pending decisions
+              </p>
+            </div>
+            <span className="text-xs text-telivity-teal font-medium">View Revenue Management &rarr;</span>
+          </div>
+        </div>
+      )}
 
       {/* Recent Activity Feed */}
       <div className="bg-white rounded-xl shadow-sm p-5">
