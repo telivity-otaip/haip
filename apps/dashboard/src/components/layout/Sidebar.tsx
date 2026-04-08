@@ -12,6 +12,8 @@ import {
   Moon,
   BarChart3,
   Radio,
+  Mail,
+  MessageSquare,
   Settings,
   X,
 } from 'lucide-react';
@@ -40,6 +42,8 @@ const NAV_ITEMS: Array<{
   { to: '/night-audit', icon: Moon, label: 'Night Audit', roles: ['admin', 'night_auditor'] },
   { to: '/reports', icon: BarChart3, label: 'Reports', roles: ['admin', 'night_auditor', 'readonly'] },
   { to: '/channels', icon: Radio, label: 'Channels', roles: ['admin'] },
+  { to: '/communications', icon: Mail, label: 'Communications', roles: ['admin', 'front_desk'] },
+  { to: '/reviews', icon: MessageSquare, label: 'Reviews', roles: ['admin', 'front_desk'] },
   { to: '/settings', icon: Settings, label: 'Settings', roles: ['admin'] },
 ];
 

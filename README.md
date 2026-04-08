@@ -14,12 +14,14 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-  <img src="https://img.shields.io/badge/Status-Phase%208%20Complete-brightgreen" alt="Phase 8 Complete" />
+  <img src="https://img.shields.io/badge/Tests-510%20passing-brightgreen" alt="510 Tests Passing" />
+  <img src="https://img.shields.io/badge/AI%20Agents-7%20built--in-blueviolet" alt="7 AI Agents" />
 </p>
 
 <p align="center">
   <a href="#what-is-haip">What is HAIP</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
+  <a href="#ai-agents">AI Agents</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#tech-stack">Tech Stack</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
@@ -34,9 +36,9 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, revenue reporting, a React admin dashboard — all open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **7 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, and schedule housekeeping. All open source under Apache 2.0.
 
-What makes HAIP different is that **AI agents are built into the architecture from day one**. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
+What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
 ### What HAIP is NOT
 
@@ -59,6 +61,7 @@ graph TB
         REST["REST API<br/>OpenAPI 3.0"]
         WS["WebSocket Gateway<br/>Real-time Events"]
         Connect["Connect API<br/>OTAIP Agent Layer"]
+        Auth["Keycloak Auth<br/>OAuth 2.0 + RBAC"]
 
         subgraph Modules
             direction LR
@@ -67,11 +70,23 @@ graph TB
             Room["Rooms<br/>Status State Machine"]
             Guest["Guest Profiles<br/>VIP + Preferences"]
             RatePlan["Rate Plans<br/>BAR + Derived + Restrictions"]
-            Payment["Payments<br/>Stripe/Adyen Tokenization"]
+            Payment["Payments<br/>Stripe Processing"]
+            Tax["Tax Engine<br/>Jurisdiction-based"]
             HK["Housekeeping<br/>Tasks + Checklists + Inspection"]
             NA["Night Audit<br/>Automated Day Close"]
             Channel["Channel Manager<br/>ARI Sync + Rate Parity"]
             Reports["Reports<br/>Revenue + Occupancy + KPIs"]
+        end
+
+        subgraph AI["AI Agent Framework"]
+            direction LR
+            DemandAgent["Demand<br/>Forecasting"]
+            PricingAgent["Dynamic<br/>Pricing"]
+            ChannelMix["Channel-Mix<br/>Optimization"]
+            Overbooking["Overbooking<br/>Management"]
+            AuditAnomaly["Night Audit<br/>Anomaly Detection"]
+            HKOptimizer["Housekeeping<br/>Optimization"]
+            CancelPredict["Cancellation<br/>Prediction"]
         end
 
         Webhook["Webhook Engine<br/>entity.action Events"]
@@ -80,7 +95,9 @@ graph TB
     subgraph Infrastructure
         PG["PostgreSQL 16<br/>(Multi-tenant)"]
         Redis["Redis 7<br/>(Cache + Pub/Sub)"]
-        OTAs["OTA Channels<br/>Booking.com · Expedia · 450+"]
+        Keycloak["Keycloak<br/>(Identity Provider)"]
+        Stripe["Stripe<br/>(Payment Processing)"]
+        OTAs["OTA Channels<br/>Booking.com · SiteMinder · 450+"]
     end
 
     Dashboard -->|HTTP + WebSocket| REST
@@ -88,11 +105,16 @@ graph TB
     OTAIP -->|REST| Connect
     ThirdParty -->|REST| REST
 
+    Auth --> Keycloak
+    REST --> Auth
     REST --> Modules
     Connect --> Modules
     Modules --> PG
     Modules --> Redis
+    AI --> PG
+    AI --> Modules
     Channel --> OTAs
+    Payment --> Stripe
     Webhook -->|POST| ThirdParty
     WS -->|Broadcast| Dashboard
 ```
@@ -103,9 +125,56 @@ graph TB
 
 - **Multi-tenant from day one** — `property_id` on every table, designed for portfolio operators managing multiple hotels
 - **Event-driven** — Webhook events on every state change (`reservation.created`, `folio.charge_posted`, `room.status_changed`). Build anything on top.
-- **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. SiteMinder/DerbySoft adapters for instant 450+ OTA reach
-- **Compliance as infrastructure** — PCI tokenization (Stripe/Adyen), GDPR audit trails, guest registration per jurisdiction. Not bolted on — built in.
-- **Real-time dashboard** — WebSocket broadcasting per property. Room status changes, new reservations, housekeeping updates — all pushed instantly.
+- **AI agents as first-class citizens** — 7 built-in agents with a common interface: `analyze() → recommend() → execute()`. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
+- **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com direct adapter + SiteMinder adapter for 450+ OTA reach
+- **Keycloak RBAC** — JWT authentication with role-based access control (admin, front_desk, housekeeping, revenue_manager). Guards on every endpoint.
+- **Compliance as infrastructure** — PCI tokenization (Stripe), GDPR audit trails, jurisdiction-based tax calculation, guest registration per jurisdiction. Not bolted on — built in.
+- **Real-time dashboard** — WebSocket broadcasting per property. Room status changes, new reservations, AI agent decisions — all pushed instantly.
+
+---
+
+## AI Agents
+
+HAIP includes **7 built-in AI agents** — 4 for revenue management and 3 for operations intelligence. Every agent follows the `HaipAgent` interface:
+
+```
+analyze() → recommend() → execute() → recordOutcome() → train()
+```
+
+### Operating Modes
+
+| Mode | Behavior |
+|------|----------|
+| **Manual** | Agent analyzes and recommends. Human approves/rejects via dashboard. |
+| **Suggest** | Agent recommends with confidence score. High-confidence decisions auto-execute. |
+| **Autopilot** | Agent executes autonomously. All decisions logged for review. |
+
+### Revenue Management Agents
+
+| Agent | What It Does |
+|-------|-------------|
+| **Demand Forecasting** | Predicts future occupancy using weighted moving averages with day-of-week seasonality, booking pace, and last-minute demand signals. Heuristic model → statistical model progression. |
+| **Dynamic Pricing** | Calculates optimal room rates based on demand tier, booking pace, lead-time decay, and weekend premiums. Enforces floor/ceiling rate constraints. |
+| **Channel-Mix Optimization** | Ranks OTA channels by net revenue (gross × (1−commission) × (1−cancel_rate)). Recommends allocation shifts and stop-sell when occupancy exceeds thresholds. |
+| **Overbooking Management** | Calculates optimal overbooking level using expected value optimization: (overbook revenue × fill probability) vs (walk cost × walk probability). Respects walk cost constraints. |
+
+### Operations Intelligence Agents
+
+| Agent | What It Does |
+|-------|-------------|
+| **Night Audit Anomaly Detection** | Scans checked-in reservations and folios for 10 anomaly types: unposted charges, missing tax, payment mismatches, stale check-ins, duplicate folios, unusual charges (z-score > 2.5 statistical outlier detection). Ranked by severity (critical/warning/info) and confidence. |
+| **Housekeeping Optimization** | Builds workload-balanced cleaning schedules. Prioritizes VIP and early check-in rooms, groups by floor for route efficiency, estimates cleaning times by task type (checkout 30min, stayover 20min, deep clean 60min, suite 45min). |
+| **Cancellation Prediction** | Scores every active reservation with a cancellation probability based on booking source (OTA 25% base vs direct 8%), deposit status, repeat guest history, VIP level, lead time, and days until arrival. Aggregates risk by date for overbooking decisions. |
+
+### Decision Logging
+
+Every agent decision is persisted:
+- **Input snapshot** — what the agent saw when it made the decision
+- **Recommendation** — what the agent suggested
+- **Outcome** — what happened after (approved/rejected/auto-executed)
+- **Performance metrics** — accuracy, revenue impact, approval rate
+
+This creates a learning loop: each decision becomes training data for model improvement.
 
 ---
 
@@ -164,6 +233,7 @@ graph TB
 
 ### Night Audit & Reporting
 - Automated night audit: room revenue posting, no-show processing, rate validation, day close
+- AI anomaly detection: 10 anomaly types with severity ranking and confidence scores
 - Daily revenue reports with department breakdown
 - Occupancy reports with ADR (Average Daily Rate) and RevPAR
 - Financial summaries with revenue categories
@@ -179,23 +249,49 @@ graph TB
 - Rate override capabilities per channel
 - Stop-sell functionality
 - Sync logging for audit trails
-- SiteMinder adapter pattern for 450+ OTA connectivity
 
-### Payments
+#### OTA Adapters
+
+| Adapter | Type | Coverage |
+|---------|------|----------|
+| **Booking.com** | Direct integration | XML-based OTA protocol. Inbound reservation webhooks, cancellation handling, rate/availability push. Full test suite (31 tests). |
+| **SiteMinder** | Aggregator | REST/JSON adapter. Connect once, distribute to 450+ OTAs. ARI push, reservation pull, rate parity sync. |
+
+### Payments (Stripe)
 - PCI DSS compliant — never stores raw card data
-- Stripe/Adyen tokenization
+- Full Stripe integration: PaymentIntents, customer creation, tokenization
 - Authorization, capture, void, and refund workflows
 - Payment recording with method tracking (card, cash, bank transfer)
 - Linked to folio charges
 
+### Tax Calculation Engine
+- Jurisdiction-based tax rules (state, city, county levels)
+- Tax types: sales tax, occupancy/lodging tax, tourism tax, VAT
+- Inclusive and exclusive tax calculation
+- Rate-based and fixed-amount taxes
+- Tax-exempt guest handling
+- Automatic tax application on charge posting
+- Tax breakdown on folio output
+
+### Authentication & Authorization (Keycloak)
+- OAuth 2.0 / OpenID Connect via Keycloak identity provider
+- JWT validation with RS256 public key verification
+- Role-based access control (RBAC) with 4 roles: `admin`, `front_desk`, `housekeeping`, `revenue_manager`
+- `@Roles()` decorator on every controller
+- `@Public()` decorator for unauthenticated endpoints (health checks)
+- `@CurrentUser()` decorator for extracting authenticated user context
+
 ### Webhook Engine
 - Real-time webhook delivery on every entity state change
+- 30+ event types including AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `housekeeping.ai_assigned`)
 - Event format: `entity.action` (e.g., `reservation.created`, `housekeeping.task_completed`)
 - Subscription management for external consumers
 
 ### Admin Dashboard
-- React SPA with 12 pages: Dashboard, Reservations, Check-In/Out, Guests, Rooms, Housekeeping, Rate Plans, Folios, Night Audit, Reports, Channel Manager, Settings
-- Real-time updates via WebSocket (new reservations, room status changes)
+- React SPA with **13 pages**: Dashboard, Reservations, Check-In/Out, Guests, Rooms, Housekeeping, Rate Plans, Folios, Night Audit, Reports, Channel Manager, Revenue Management, Settings
+- Revenue Management page: KPI cards, pending AI recommendations with approve/reject, agent performance metrics, per-agent configuration
+- Night Audit page: AI anomaly detection section with severity-coded alerts
+- Real-time updates via WebSocket (new reservations, room status changes, AI agent decisions)
 - Responsive layout with mobile sidebar drawer
 - Calendar view for reservations (day/week/month)
 - Housekeeping kanban board
@@ -220,13 +316,15 @@ graph TB
 | Cache & Queue | Redis 7 + BullMQ | Caching, job queues, pub/sub |
 | Real-time | Socket.IO (via NestJS Gateway) | WebSocket broadcasting per property |
 | API Spec | OpenAPI 3.0 (auto-generated) | Swagger UI at `/docs` |
-| Auth | OAuth 2.0 / OpenID Connect | Standards-based authentication |
-| Payments | Stripe / Adyen (tokenized) | PCI DSS compliant |
+| Auth | Keycloak (OAuth 2.0 / OIDC) | Identity provider, JWT, RBAC |
+| Payments | Stripe | PCI DSS compliant payment processing |
+| OTA Channels | Booking.com (XML) + SiteMinder (REST) | Direct + aggregated OTA connectivity |
+| XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest + React Testing Library | Unit and component tests |
+| Testing | Vitest (510 tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
-| CI | GitHub Actions | Automated testing and builds |
+| CI/CD | GitHub Actions | Automated testing, builds, and releases |
 
 ---
 
@@ -245,14 +343,15 @@ graph TB
 git clone https://github.com/telivity-otaip/haip.git
 cd haip
 
-# Start PostgreSQL + Redis
-docker compose up -d postgres redis
+# Start PostgreSQL + Redis + Keycloak
+docker compose up -d postgres redis keycloak
 
 # Install dependencies
 pnpm install
 
 # Copy environment config
 cp .env.example .env
+# Configure: KEYCLOAK_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 
 # Build workspace packages (database + shared)
 pnpm build
@@ -273,6 +372,7 @@ pnpm --filter @haip/dashboard dev
 - API: `http://localhost:3000`
 - Swagger docs: `http://localhost:3000/docs`
 - Dashboard: `http://localhost:5173`
+- Keycloak admin: `http://localhost:8080`
 
 ### Run with Docker (production)
 
@@ -280,12 +380,12 @@ pnpm --filter @haip/dashboard dev
 docker compose up
 ```
 
-This starts PostgreSQL, Redis, and the HAIP API + Dashboard in a single container. The dashboard is served as static files by NestJS in production mode.
+This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a single stack. The dashboard is served as static files by NestJS in production mode.
 
 ### Run tests
 
 ```bash
-# All tests (API + Dashboard)
+# All tests (510 tests across 43 test files)
 pnpm test
 
 # API tests only
@@ -331,7 +431,22 @@ haip/
 │   │   ├── src/
 │   │   │   ├── database/           # Drizzle connection + module
 │   │   │   └── modules/
-│   │   │       ├── channel/        # Channel manager (ARI, rate parity, OTA sync)
+│   │   │       ├── agent/          # AI Agent framework
+│   │   │       │   ├── demand/     # Demand forecasting agent
+│   │   │       │   ├── pricing/    # Dynamic pricing agent
+│   │   │       │   ├── channel-mix/# Channel-mix optimization agent
+│   │   │       │   ├── overbooking/# Overbooking management agent
+│   │   │       │   ├── night-audit/# Night audit anomaly detection agent
+│   │   │       │   ├── housekeeping/# Housekeeping optimization agent
+│   │   │       │   ├── cancellation/# Cancellation prediction agent
+│   │   │       │   ├── training/   # Agent training/learning utilities
+│   │   │       │   ├── interfaces/ # HaipAgent interface definition
+│   │   │       │   └── dto/        # Agent config + decision DTOs
+│   │   │       ├── auth/           # Keycloak JWT + RBAC guards
+│   │   │       ├── channel/        # Channel manager (ARI, rate parity)
+│   │   │       │   └── adapters/   # OTA channel adapters
+│   │   │       │       ├── booking-com/ # Booking.com XML adapter
+│   │   │       │       └── siteminder/  # SiteMinder REST adapter
 │   │   │       ├── connect/        # OTAIP agent API layer
 │   │   │       ├── events/         # WebSocket gateway
 │   │   │       ├── folio/          # Folios, charges, routing, city ledger
@@ -339,28 +454,30 @@ haip/
 │   │   │       ├── health/         # Health check
 │   │   │       ├── housekeeping/   # Tasks, checklists, inspection, dashboard
 │   │   │       ├── night-audit/    # Automated night audit + day close
-│   │   │       ├── payment/        # Tokenized payments (Stripe/Adyen)
+│   │   │       ├── payment/        # Stripe payment processing
 │   │   │       ├── property/       # Multi-property configuration
 │   │   │       ├── rate-plan/      # Rates, derivation, restrictions
 │   │   │       ├── reports/        # Revenue, occupancy, financial reports
 │   │   │       ├── reservation/    # Booking lifecycle + availability
 │   │   │       ├── room/           # Room types, inventory, status machine
+│   │   │       ├── tax/            # Tax calculation engine
 │   │   │       └── webhook/        # Event dispatch engine
 │   │   ├── Dockerfile              # Multi-stage build (API + Dashboard)
 │   │   └── tsconfig.json
 │   └── dashboard/                  # React admin dashboard
 │       ├── src/
 │       │   ├── components/         # Layout, UI primitives, modals
+│       │   ├── context/            # PropertyContext for multi-tenant
 │       │   ├── hooks/              # useApi, useSocket, data hooks
-│       │   ├── pages/              # 12 page components
+│       │   ├── pages/              # 13 page components
 │       │   └── lib/                # API client, utilities
 │       ├── tailwind.config.ts
 │       └── vite.config.ts
 ├── packages/
 │   ├── database/                   # Drizzle ORM schema + migrations
-│   │   └── src/schema/             # 10 table files (property, room, guest, etc.)
-│   └── shared/                     # Shared types, enums, constants
-├── docker-compose.yml              # PostgreSQL + Redis + API
+│   │   └── src/schema/             # Table files (property, room, guest, agent, etc.)
+│   └── shared/                     # Shared types, enums, webhook events
+├── docker-compose.yml              # PostgreSQL + Redis + Keycloak + API
 ├── CLAUDE.md                       # AI agent constitution
 └── .env.example                    # Environment template
 ```
@@ -371,7 +488,22 @@ haip/
 
 All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run the API and visit `http://localhost:3000/docs` for the interactive Swagger UI.
 
-### Core Endpoints (~90 total)
+### Core Endpoints (~100 total)
+
+<details>
+<summary><strong>AI Agents</strong> — 8 endpoints</summary>
+
+```
+GET    /api/v1/agents/:propertyId                         # List all agents with status
+GET    /api/v1/agents/:propertyId/:agentType/config       # Get agent configuration
+PUT    /api/v1/agents/:propertyId/:agentType/config       # Update config (mode, enabled, threshold)
+POST   /api/v1/agents/:propertyId/:agentType/run          # Trigger manual agent run
+GET    /api/v1/agents/:propertyId/:agentType/decisions     # Decision history
+POST   /api/v1/agents/:propertyId/decisions/:id/approve    # Approve recommendation
+POST   /api/v1/agents/:propertyId/decisions/:id/reject     # Reject recommendation
+GET    /api/v1/agents/:propertyId/:agentType/performance   # Performance metrics
+```
+</details>
 
 <details>
 <summary><strong>Reservations</strong> — 13 endpoints</summary>
@@ -455,6 +587,17 @@ GET    /api/v1/channels/rate-parity                # Check rate parity
 GET    /api/v1/channels/rate-parity/effective-rate  # Get effective rate
 POST   /api/v1/channels/rate-parity/override       # Set rate override
 DELETE /api/v1/channels/rate-parity/override       # Remove override
+```
+</details>
+
+<details>
+<summary><strong>Tax Calculation</strong> — 4 endpoints</summary>
+
+```
+POST   /api/v1/tax/calculate                       # Calculate taxes for a charge
+GET    /api/v1/tax/rules                           # List tax rules for property
+POST   /api/v1/tax/rules                           # Create tax rule
+PATCH  /api/v1/tax/rules/:id                       # Update tax rule
 ```
 </details>
 
@@ -583,6 +726,7 @@ socket.emit('joinProperty', { propertyId: 'uuid-here' });
 socket.on('reservation.created', (data) => { /* ... */ });
 socket.on('room.status_changed', (data) => { /* ... */ });
 socket.on('housekeeping.task_completed', (data) => { /* ... */ });
+socket.on('agent.decision_made', (data) => { /* ... */ });
 ```
 
 ### Broadcast Events
@@ -591,9 +735,10 @@ All webhook events are simultaneously broadcast via WebSocket to clients subscri
 
 - `reservation.created`, `reservation.checked_in`, `reservation.checked_out`
 - `room.status_changed`
-- `housekeeping.task_assigned`, `housekeeping.task_completed`
+- `housekeeping.task_assigned`, `housekeeping.task_completed`, `housekeeping.ai_assigned`
 - `folio.charge_posted`
 - `channel.sync_completed`
+- `agent.decision_made`, `agent.cancellation_forecast_updated`
 
 ---
 
@@ -601,10 +746,11 @@ All webhook events are simultaneously broadcast via WebSocket to clients subscri
 
 | Requirement | How HAIP Handles It |
 |-------------|-------------------|
-| **PCI DSS** | Never stores raw card data. Stripe/Adyen tokenization only. Payments table stores token + last four + brand. |
+| **PCI DSS** | Never stores raw card data. Stripe tokenization via PaymentIntents. Payments table stores token + last four + brand. |
 | **GDPR** | Audit trail on every data modification, consent tracking fields, data retention and deletion APIs. |
 | **Guest Registration** | Configurable per jurisdiction. ID verification fields. EU police reporting interface planned. |
-| **Tax Calculation** | Tax jurisdiction per property. Inclusive/exclusive handling per rate plan. Tourist/occupancy tax support. |
+| **Tax Calculation** | Jurisdiction-based tax engine. Inclusive/exclusive handling. Sales, occupancy, tourism, and VAT tax types. Per-property rules with exemption support. |
+| **Authentication** | Keycloak OIDC with JWT validation. Role-based access control on every endpoint. No credential storage in application. |
 
 ---
 
@@ -630,7 +776,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests
+pnpm test             # Run all tests (510 tests, 43 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```

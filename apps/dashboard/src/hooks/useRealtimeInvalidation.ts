@@ -11,6 +11,7 @@ const EVENT_KEY_MAP: Record<string, string[][]> = {
   'audit.': [['audit'], ['reports']],
   'channel.': [['channels']],
   'agent.': [['agents'], ['agent-decisions'], ['agent-performance']],
+  'guest.': [['agent-decisions'], ['reviews']],
   'connect.': [['connect']],
 };
 

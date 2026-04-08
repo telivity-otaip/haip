@@ -82,3 +82,10 @@ export {
   agentDecisions,
   agentTrainingSnapshots,
 } from './agent.js';
+
+// Guest Reviews
+export {
+  reviewSourceEnum,
+  reviewResponseStatusEnum,
+  guestReviews,
+} from './review.js';

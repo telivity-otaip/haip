@@ -9,12 +9,16 @@ import { OverbookingAgent } from './overbooking/overbooking.agent';
 import { NightAuditAnomalyAgent } from './night-audit/night-audit-anomaly.agent';
 import { HousekeepingOptimizerAgent } from './housekeeping/housekeeping-optimizer.agent';
 import { CancellationPredictorAgent } from './cancellation/cancellation-predictor.agent';
+import { GuestCommunicationAgent } from './guest-comms/guest-communication.agent';
+import { ReviewResponseAgent } from './review-response/review-response.agent';
+import { EmailService } from './guest-comms/email.service';
 
 @Module({
   imports: [WebhookModule],
   controllers: [AgentController],
   providers: [
     AgentService,
+    EmailService,
     DemandForecastAgent,
     DynamicPricingAgent,
     ChannelMixAgent,
@@ -22,6 +26,8 @@ import { CancellationPredictorAgent } from './cancellation/cancellation-predicto
     NightAuditAnomalyAgent,
     HousekeepingOptimizerAgent,
     CancellationPredictorAgent,
+    GuestCommunicationAgent,
+    ReviewResponseAgent,
   ],
   exports: [AgentService, DemandForecastAgent],
 })

@@ -17,6 +17,8 @@ const Revenue = lazy(() => import('./pages/Revenue'));
 const NightAudit = lazy(() => import('./pages/NightAudit'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Channels = lazy(() => import('./pages/Channels'));
+const Communications = lazy(() => import('./pages/Communications'));
+const Reviews = lazy(() => import('./pages/Reviews'));
 const Settings = lazy(() => import('./pages/Settings'));
 
 export default function App() {
@@ -39,6 +41,8 @@ export default function App() {
             <Route path="/night-audit" element={<NightAudit />} />
             <Route path="/reports/*" element={<Reports />} />
             <Route path="/channels/*" element={<Channels />} />
+            <Route path="/communications" element={<Communications />} />
+            <Route path="/reviews" element={<Reviews />} />
             <Route path="/settings/*" element={<Settings />} />
           </Routes>
         </Suspense>

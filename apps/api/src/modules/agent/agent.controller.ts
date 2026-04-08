@@ -3,22 +3,31 @@ import {
   Get,
   Put,
   Post,
+  Patch,
   Param,
   Body,
   Query,
+  Inject,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { eq, and, desc } from 'drizzle-orm';
+import { guestReviews } from '@haip/database';
+import { DRIZZLE } from '../../database/database.module';
 import { Roles } from '../auth/roles.decorator';
 import { AgentService } from './agent.service';
 import { UpdateAgentConfigDto } from './dto/agent-config.dto';
 import { RejectDecisionDto } from './dto/agent-decision.dto';
+import { CreateReviewDto, UpdateReviewResponseDto } from './dto/create-review.dto';
 
 @ApiTags('AI Agents')
 @Controller('agents')
 @Roles('admin')
 export class AgentController {
-  constructor(private readonly agentService: AgentService) {}
+  constructor(
+    private readonly agentService: AgentService,
+    @Inject(DRIZZLE) private readonly db: any,
+  ) {}
 
   @Get(':propertyId')
   @ApiOperation({ summary: 'List all agents with status for a property' })
@@ -95,5 +104,83 @@ export class AgentController {
     @Param('agentType') agentType: string,
   ) {
     return this.agentService.getPerformance(propertyId, agentType);
+  }
+
+  // --- Guest Reviews ---
+
+  @Post(':propertyId/reviews')
+  @ApiOperation({ summary: 'Submit a guest review for AI response drafting' })
+  @Roles('admin', 'front_desk')
+  async createReview(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Body() dto: CreateReviewDto,
+  ) {
+    const [review] = await this.db
+      .insert(guestReviews)
+      .values({
+        propertyId,
+        source: dto.source as any,
+        guestName: dto.guestName,
+        rating: dto.rating,
+        reviewText: dto.reviewText,
+        stayDate: dto.stayDate ?? null,
+        reservationId: dto.reservationId ?? null,
+      })
+      .returning();
+
+    // Auto-trigger review response agent
+    await this.agentService.runAgent(propertyId, 'review_response', {
+      triggeredBy: 'event',
+      eventPayload: { reviewId: review.id },
+    });
+
+    return review;
+  }
+
+  @Get(':propertyId/reviews')
+  @ApiOperation({ summary: 'List guest reviews for a property' })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'source', required: false })
+  @Roles('admin', 'front_desk')
+  async listReviews(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('status') status?: string,
+    @Query('source') source?: string,
+  ) {
+    const conditions = [eq(guestReviews.propertyId, propertyId)];
+    if (status) conditions.push(eq(guestReviews.responseStatus, status as any));
+    if (source) conditions.push(eq(guestReviews.source, source as any));
+
+    return this.db
+      .select()
+      .from(guestReviews)
+      .where(and(...conditions))
+      .orderBy(desc(guestReviews.createdAt));
+  }
+
+  @Patch(':propertyId/reviews/:id')
+  @ApiOperation({ summary: 'Update review response (edit, approve, mark posted)' })
+  @Roles('admin', 'front_desk')
+  async updateReview(
+    @Param('propertyId', ParseUUIDPipe) propertyId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateReviewResponseDto,
+  ) {
+    const setValues: Record<string, unknown> = {};
+    if (dto.responseText !== undefined) setValues['responseText'] = dto.responseText;
+    if (dto.responseStatus !== undefined) {
+      setValues['responseStatus'] = dto.responseStatus;
+      if (dto.responseStatus === 'posted') {
+        setValues['respondedAt'] = new Date();
+      }
+    }
+
+    const [updated] = await this.db
+      .update(guestReviews)
+      .set(setValues)
+      .where(and(eq(guestReviews.id, id), eq(guestReviews.propertyId, propertyId)))
+      .returning();
+
+    return updated;
   }
 }

@@ -55,6 +55,11 @@ export const WEBHOOK_EVENTS = {
   'agent.cancellation_forecast_updated': 'agent.cancellation_forecast_updated',
   'rate.ai_adjusted': 'rate.ai_adjusted',
   'housekeeping.ai_assigned': 'housekeeping.ai_assigned',
+
+  // Guest engagement events
+  'guest.communication_drafted': 'guest.communication_drafted',
+  'guest.communication_sent': 'guest.communication_sent',
+  'guest.review_response_drafted': 'guest.review_response_drafted',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;

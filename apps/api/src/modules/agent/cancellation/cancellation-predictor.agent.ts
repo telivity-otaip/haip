@@ -57,7 +57,7 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
     }
 
     // Check for deposits/payments (via folio → payment chain)
-    let paymentMap = new Map<string, boolean>();
+    const paymentMap = new Map<string, boolean>();
     const folioData = await this.db
       .select({ id: folios.id, reservationId: folios.reservationId })
       .from(folios)
