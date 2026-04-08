@@ -14,8 +14,8 @@
   <img src="https://img.shields.io/badge/NestJS-framework-E0234E?logo=nestjs&logoColor=white" alt="NestJS" />
   <img src="https://img.shields.io/badge/PostgreSQL-database-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue" alt="Apache 2.0 License" />
-  <img src="https://img.shields.io/badge/Tests-510%20passing-brightgreen" alt="510 Tests Passing" />
-  <img src="https://img.shields.io/badge/AI%20Agents-7%20built--in-blueviolet" alt="7 AI Agents" />
+  <img src="https://img.shields.io/badge/Tests-551%20passing-brightgreen" alt="551 Tests Passing" />
+  <img src="https://img.shields.io/badge/AI%20Agents-9%20built--in-blueviolet" alt="9 AI Agents" />
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **7 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, and schedule housekeeping. All open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **9 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
 
 What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
@@ -87,6 +87,8 @@ graph TB
             AuditAnomaly["Night Audit<br/>Anomaly Detection"]
             HKOptimizer["Housekeeping<br/>Optimization"]
             CancelPredict["Cancellation<br/>Prediction"]
+            GuestComms["Guest<br/>Communication"]
+            ReviewResp["Review<br/>Response"]
         end
 
         Webhook["Webhook Engine<br/>entity.action Events"]
@@ -125,7 +127,7 @@ graph TB
 
 - **Multi-tenant from day one** — `property_id` on every table, designed for portfolio operators managing multiple hotels
 - **Event-driven** — Webhook events on every state change (`reservation.created`, `folio.charge_posted`, `room.status_changed`). Build anything on top.
-- **AI agents as first-class citizens** — 7 built-in agents with a common interface: `analyze() → recommend() → execute()`. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
+- **AI agents as first-class citizens** — 9 built-in agents with a common interface: `analyze() → recommend() → execute()`. Three operating modes: manual, suggest, autopilot. Decision logging for continuous learning.
 - **ChannelAdapter pattern** — Same abstraction as OTAIP's ConnectAdapter. Booking.com direct adapter + SiteMinder adapter for 450+ OTA reach
 - **Keycloak RBAC** — JWT authentication with role-based access control (admin, front_desk, housekeeping, revenue_manager). Guards on every endpoint.
 - **Compliance as infrastructure** — PCI tokenization (Stripe), GDPR audit trails, jurisdiction-based tax calculation, guest registration per jurisdiction. Not bolted on — built in.
@@ -135,7 +137,7 @@ graph TB
 
 ## AI Agents
 
-HAIP includes **7 built-in AI agents** — 4 for revenue management and 3 for operations intelligence. Every agent follows the `HaipAgent` interface:
+HAIP includes **9 built-in AI agents** — 4 for revenue management, 3 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
 
 ```
 analyze() → recommend() → execute() → recordOutcome() → train()
@@ -165,6 +167,13 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 | **Night Audit Anomaly Detection** | Scans checked-in reservations and folios for 10 anomaly types: unposted charges, missing tax, payment mismatches, stale check-ins, duplicate folios, unusual charges (z-score > 2.5 statistical outlier detection). Ranked by severity (critical/warning/info) and confidence. |
 | **Housekeeping Optimization** | Builds workload-balanced cleaning schedules. Prioritizes VIP and early check-in rooms, groups by floor for route efficiency, estimates cleaning times by task type (checkout 30min, stayover 20min, deep clean 60min, suite 45min). |
 | **Cancellation Prediction** | Scores every active reservation with a cancellation probability based on booking source (OTA 25% base vs direct 8%), deposit status, repeat guest history, VIP level, lead time, and days until arrival. Aggregates risk by date for overbooking decisions. |
+
+### Guest Engagement Agents
+
+| Agent | What It Does |
+|-------|-------------|
+| **Guest Communication** | Template-based lifecycle emails triggered by reservation events: confirmation, pre-arrival (3 days), day-of arrival, welcome (on check-in), post-stay, and win-back (90 days). Repeat vs first-time guest personalization. GDPR opt-out enforcement — unsubscribed guests get no marketing emails. Duplicate prevention via decision log. Configurable SMTP transport (defaults to draft-only). |
+| **Review Response** | Drafts professional responses to guest reviews entered by staff. Keyword-based topic extraction across 10 categories (cleanliness, staff, value, noise, food, wifi, etc.). Sentiment classification from rating (1-2 negative, 3 mixed, 4-5 positive). Three response styles (formal/friendly/casual). Matches guests to reservations for stay-specific references. Template-based assembly — no LLM freeform text, no hallucination risk. |
 
 ### Decision Logging
 
@@ -283,14 +292,16 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Webhook Engine
 - Real-time webhook delivery on every entity state change
-- 30+ event types including AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `housekeeping.ai_assigned`)
+- 35+ event types including AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
 - Event format: `entity.action` (e.g., `reservation.created`, `housekeeping.task_completed`)
 - Subscription management for external consumers
 
 ### Admin Dashboard
-- React SPA with **13 pages**: Dashboard, Reservations, Check-In/Out, Guests, Rooms, Housekeeping, Rate Plans, Folios, Night Audit, Reports, Channel Manager, Revenue Management, Settings
+- React SPA with **15 pages**: Dashboard, Reservations, Check-In/Out, Guests, Rooms, Housekeeping, Rate Plans, Folios, Night Audit, Reports, Channel Manager, Revenue Management, Communications, Reviews, Settings
 - Revenue Management page: KPI cards, pending AI recommendations with approve/reject, agent performance metrics, per-agent configuration
 - Night Audit page: AI anomaly detection section with severity-coded alerts
+- Communications page: email draft preview, send/approve workflow, delivery stats
+- Reviews page: add reviews, AI-drafted responses, edit/approve/mark-posted workflow, rating stats
 - Real-time updates via WebSocket (new reservations, room status changes, AI agent decisions)
 - Responsive layout with mobile sidebar drawer
 - Calendar view for reservations (day/week/month)
@@ -321,7 +332,7 @@ This creates a learning loop: each decision becomes training data for model impr
 | OTA Channels | Booking.com (XML) + SiteMinder (REST) | Direct + aggregated OTA connectivity |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (510 tests) | Unit and integration tests |
+| Testing | Vitest (551 tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -352,6 +363,7 @@ pnpm install
 # Copy environment config
 cp .env.example .env
 # Configure: KEYCLOAK_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+# Optional SMTP for guest emails: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
 
 # Build workspace packages (database + shared)
 pnpm build
@@ -385,7 +397,7 @@ This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a singl
 ### Run tests
 
 ```bash
-# All tests (510 tests across 43 test files)
+# All tests (551 tests across 45 test files)
 pnpm test
 
 # API tests only
@@ -439,6 +451,8 @@ haip/
 │   │   │       │   ├── night-audit/# Night audit anomaly detection agent
 │   │   │       │   ├── housekeeping/# Housekeeping optimization agent
 │   │   │       │   ├── cancellation/# Cancellation prediction agent
+│   │   │       │   ├── guest-comms/ # Guest communication agent + email service
+│   │   │       │   ├── review-response/ # Review response agent
 │   │   │       │   ├── training/   # Agent training/learning utilities
 │   │   │       │   ├── interfaces/ # HaipAgent interface definition
 │   │   │       │   └── dto/        # Agent config + decision DTOs
@@ -469,7 +483,7 @@ haip/
 │       │   ├── components/         # Layout, UI primitives, modals
 │       │   ├── context/            # PropertyContext for multi-tenant
 │       │   ├── hooks/              # useApi, useSocket, data hooks
-│       │   ├── pages/              # 13 page components
+│       │   ├── pages/              # 15 page components
 │       │   └── lib/                # API client, utilities
 │       ├── tailwind.config.ts
 │       └── vite.config.ts
@@ -491,7 +505,7 @@ All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run t
 ### Core Endpoints (~100 total)
 
 <details>
-<summary><strong>AI Agents</strong> — 8 endpoints</summary>
+<summary><strong>AI Agents</strong> — 11 endpoints</summary>
 
 ```
 GET    /api/v1/agents/:propertyId                         # List all agents with status
@@ -502,6 +516,9 @@ GET    /api/v1/agents/:propertyId/:agentType/decisions     # Decision history
 POST   /api/v1/agents/:propertyId/decisions/:id/approve    # Approve recommendation
 POST   /api/v1/agents/:propertyId/decisions/:id/reject     # Reject recommendation
 GET    /api/v1/agents/:propertyId/:agentType/performance   # Performance metrics
+POST   /api/v1/agents/:propertyId/reviews                  # Submit guest review
+GET    /api/v1/agents/:propertyId/reviews                  # List reviews (filter by status/source)
+PATCH  /api/v1/agents/:propertyId/reviews/:id              # Update review response
 ```
 </details>
 
@@ -739,6 +756,7 @@ All webhook events are simultaneously broadcast via WebSocket to clients subscri
 - `folio.charge_posted`
 - `channel.sync_completed`
 - `agent.decision_made`, `agent.cancellation_forecast_updated`
+- `guest.communication_drafted`, `guest.communication_sent`, `guest.review_response_drafted`
 
 ---
 
@@ -776,7 +794,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (510 tests, 43 files)
+pnpm test             # Run all tests (551 tests, 45 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```
