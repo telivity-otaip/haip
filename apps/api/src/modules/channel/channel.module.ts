@@ -6,6 +6,7 @@ import { InboundReservationService } from './inbound-reservation.service';
 import { RateParityService } from './rate-parity.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { MockChannelAdapter } from './adapters/mock.adapter';
+import { BookingComAdapter } from './adapters/booking-com';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 
@@ -19,6 +20,7 @@ import { WebhookModule } from '../webhook/webhook.module';
     RateParityService,
     ChannelAdapterFactory,
     MockChannelAdapter,
+    BookingComAdapter,
   ],
   exports: [ChannelService, AriService, InboundReservationService],
 })

@@ -79,6 +79,10 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: haip
       KEYCLOAK_CLIENT_ID: haip-api
+      BOOKING_COM_BASE_URL: http://mock-bookingcom:4000/ota
+      BOOKING_COM_USERNAME: haip_test
+      BOOKING_COM_PASSWORD: test_password
+      BOOKING_COM_HOTEL_ID: MOCK_HOTEL_1
     ports:
       - '3000:3000'
     depends_on:
@@ -89,6 +93,21 @@ services:
     # For local dev, mount source and use watch mode
     # volumes:
     #   - ./apps/api/src:/app/apps/api/src
+
+  # Mock Booking.com Connectivity Partner API (optional, for channel testing)
+  mock-bookingcom:
+    build:
+      context: ./tools/mock-bookingcom
+      dockerfile: Dockerfile
+    container_name: haip-mock-bookingcom
+    environment:
+      PORT: 4000
+      AUTH_USER: haip_test
+      AUTH_PASS: test_password
+    ports:
+      - '4000:4000'
+    profiles:
+      - channels
 
 volumes:
   postgres-data:

@@ -1,0 +1,14 @@
+{
+  "name": "@haip/mock-bookingcom",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Mock Booking.com Connectivity Partner API for development and testing",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.5.0"
+  }
+}
