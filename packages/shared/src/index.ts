@@ -52,7 +52,9 @@ export const WEBHOOK_EVENTS = {
   'agent.decision_created': 'agent.decision_created',
   'agent.decision_executed': 'agent.decision_executed',
   'agent.training_completed': 'agent.training_completed',
+  'agent.cancellation_forecast_updated': 'agent.cancellation_forecast_updated',
   'rate.ai_adjusted': 'rate.ai_adjusted',
+  'housekeeping.ai_assigned': 'housekeeping.ai_assigned',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;
