@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -41,6 +40,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -67,34 +68,93 @@ jobs:
           REDIS_URL: redis://localhost:6379
 
   release:
-    name: Create Release
+    name: Auto Release
     needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get previous tag
-        id: prev_tag
+      - name: Get latest tag and compute next version
+        id: version
         run: |
-          PREV=$(git tag --sort=-version:refname | grep '^v' | sed -n '2p')
-          echo "tag=${PREV:-$(git rev-list --max-parents=0 HEAD)}" >> $GITHUB_OUTPUT
+          # Get the latest semver tag
+          LATEST=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+
+          if [ -z "$LATEST" ]; then
+            NEXT="v1.0.0"
+            PREV=""
+          else
+            PREV="$LATEST"
+            # Strip the v prefix
+            VER="${LATEST#v}"
+            MAJOR=$(echo "$VER" | cut -d. -f1)
+            MINOR=$(echo "$VER" | cut -d. -f2)
+            PATCH=$(echo "$VER" | cut -d. -f3)
+
+            # Roll: patch 0-9, then minor 0-9, then major
+            if [ "$PATCH" -lt 9 ]; then
+              PATCH=$((PATCH + 1))
+            elif [ "$MINOR" -lt 9 ]; then
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            else
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+            fi
+
+            NEXT="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          # Check if there are new commits since last tag
+          if [ -n "$PREV" ]; then
+            COMMITS=$(git rev-list ${PREV}..HEAD --count)
+            if [ "$COMMITS" -eq 0 ]; then
+              echo "skip=true" >> $GITHUB_OUTPUT
+              echo "No new commits since $PREV — skipping release"
+              exit 0
+            fi
+          fi
+
+          echo "skip=false" >> $GITHUB_OUTPUT
+          echo "next=$NEXT" >> $GITHUB_OUTPUT
+          echo "prev=$PREV" >> $GITHUB_OUTPUT
+          echo "Next version: $NEXT (previous: ${PREV:-none})"
+
+      - name: Create tag
+        if: steps.version.outputs.skip == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a ${{ steps.version.outputs.next }} -m "Release ${{ steps.version.outputs.next }}"
+          git push origin ${{ steps.version.outputs.next }}
 
       - name: Generate changelog
-        id: changelog
+        if: steps.version.outputs.skip == 'false'
         run: |
+          PREV="${{ steps.version.outputs.prev }}"
+          NEXT="${{ steps.version.outputs.next }}"
+
           echo "## What's Changed" > changelog.md
           echo "" >> changelog.md
-          git log ${{ steps.prev_tag.outputs.tag }}..HEAD --pretty=format:"- %s (%h)" --no-merges >> changelog.md
-          echo "" >> changelog.md
-          echo "" >> changelog.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.prev_tag.outputs.tag }}...${{ github.ref_name }}" >> changelog.md
+
+          if [ -n "$PREV" ]; then
+            git log ${PREV}..HEAD~0 --pretty=format:"- %s (%h)" --no-merges >> changelog.md
+            echo "" >> changelog.md
+            echo "" >> changelog.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV}...${NEXT}" >> changelog.md
+          else
+            git log --pretty=format:"- %s (%h)" --no-merges >> changelog.md
+          fi
 
       - name: Create GitHub Release
+        if: steps.version.outputs.skip == 'false'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.next }}
           body_path: changelog.md
           generate_release_notes: false
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
