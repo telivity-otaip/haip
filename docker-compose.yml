@@ -83,6 +83,10 @@ services:
       BOOKING_COM_USERNAME: haip_test
       BOOKING_COM_PASSWORD: test_password
       BOOKING_COM_HOTEL_ID: MOCK_HOTEL_1
+      SITEMINDER_BASE_URL: http://mock-siteminder:4001/pmsxchange
+      SITEMINDER_USERNAME: haip_test
+      SITEMINDER_PASSWORD: test_password
+      SITEMINDER_HOTEL_CODE: MOCK_SM_HOTEL
     ports:
       - '3000:3000'
     depends_on:
@@ -106,6 +110,21 @@ services:
       AUTH_PASS: test_password
     ports:
       - '4000:4000'
+    profiles:
+      - channels
+
+  # Mock SiteMinder pmsXchange API (optional, for channel testing)
+  mock-siteminder:
+    build:
+      context: ./tools/mock-siteminder
+      dockerfile: Dockerfile
+    container_name: haip-mock-siteminder
+    environment:
+      PORT: 4001
+      AUTH_USER: haip_test
+      AUTH_PASS: test_password
+    ports:
+      - '4001:4001'
     profiles:
       - channels
 

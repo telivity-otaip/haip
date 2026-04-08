@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import type { ChannelAdapter } from './channel-adapter.interface';
 import { MockChannelAdapter } from './adapters/mock.adapter';
 import { BookingComAdapter } from './adapters/booking-com';
+import { SiteMinderAdapter } from './adapters/siteminder';
 
 /**
  * Factory that maps adapterType strings to ChannelAdapter instances.
@@ -14,10 +15,11 @@ export class ChannelAdapterFactory {
   constructor(
     private readonly mockAdapter: MockChannelAdapter,
     private readonly bookingComAdapter: BookingComAdapter,
+    private readonly siteMinderAdapter: SiteMinderAdapter,
   ) {
     this.adapters.set('mock', this.mockAdapter);
     this.adapters.set('booking_com', this.bookingComAdapter);
-    // Future: this.adapters.set('siteminder', this.siteminderAdapter);
+    this.adapters.set('siteminder', this.siteMinderAdapter);
     // Future: this.adapters.set('derbysoft', this.derbysoftAdapter);
   }
 

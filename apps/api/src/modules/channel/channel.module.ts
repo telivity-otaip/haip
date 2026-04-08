@@ -8,6 +8,7 @@ import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { MockChannelAdapter } from './adapters/mock.adapter';
 import { BookingComAdapter } from './adapters/booking-com';
 import { BookingComInboundController } from './adapters/booking-com/booking-com-inbound.controller';
+import { SiteMinderAdapter } from './adapters/siteminder';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 
@@ -22,6 +23,7 @@ import { WebhookModule } from '../webhook/webhook.module';
     ChannelAdapterFactory,
     MockChannelAdapter,
     BookingComAdapter,
+    SiteMinderAdapter,
   ],
   exports: [ChannelService, AriService, InboundReservationService],
 })
