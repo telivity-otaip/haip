@@ -7,12 +7,13 @@ import { RateParityService } from './rate-parity.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { MockChannelAdapter } from './adapters/mock.adapter';
 import { BookingComAdapter } from './adapters/booking-com';
+import { BookingComInboundController } from './adapters/booking-com/booking-com-inbound.controller';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
 
 @Module({
   imports: [ReservationModule, WebhookModule],
-  controllers: [ChannelController],
+  controllers: [ChannelController, BookingComInboundController],
   providers: [
     ChannelService,
     AriService,

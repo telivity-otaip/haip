@@ -137,6 +137,18 @@ export class ChannelService {
     return adapter.testConnection(connection.config ?? {});
   }
 
+  async findByAdapterType(adapterType: string) {
+    return this.db
+      .select()
+      .from(channelConnections)
+      .where(
+        and(
+          eq(channelConnections.adapterType, adapterType),
+          eq(channelConnections.isActive, true),
+        ),
+      );
+  }
+
   async updateSyncStatus(
     id: string,
     status: string,
