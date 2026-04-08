@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Moon, Play } from 'lucide-react';
+import { Moon, Play, Brain, AlertTriangle, Info, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
 import { useProperty } from '../context/PropertyContext';
@@ -17,6 +17,48 @@ interface AuditResult {
   noShowsProcessed?: number;
   revenueTotal?: number;
   steps?: { step: string; count: number; status: string }[];
+}
+
+const SEVERITY_ICONS = { critical: XCircle, warning: AlertTriangle, info: Info };
+const SEVERITY_COLORS = { critical: 'text-red-600 bg-red-50', warning: 'text-telivity-orange bg-orange-50', info: 'text-blue-500 bg-blue-50' };
+
+function AnomalySection({ propertyId }: { propertyId: string }) {
+  const { data: decisions } = useQuery({
+    queryKey: ['agent-decisions', propertyId, 'night_audit'],
+    queryFn: () => api.get(`/v1/agents/${propertyId}/decisions/night_audit`, { params: { limit: 5 } }).then((r) => r.data?.data ?? r.data ?? []),
+    enabled: !!propertyId,
+  });
+
+  const latest = Array.isArray(decisions) ? decisions[0] : null;
+  const anomalies: any[] = latest?.recommendation?.anomalies ?? [];
+
+  if (anomalies.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-5 mb-6 border-l-4 border-telivity-teal">
+      <div className="flex items-center gap-3 mb-4">
+        <Brain size={20} className="text-telivity-teal" />
+        <h2 className="text-sm font-semibold text-telivity-navy">AI Anomaly Detection</h2>
+        <span className="text-xs text-telivity-mid-grey ml-auto">{anomalies.length} issues found</span>
+      </div>
+      <div className="space-y-2">
+        {anomalies.slice(0, 10).map((a: any, i: number) => {
+          const Icon = SEVERITY_ICONS[a.severity as keyof typeof SEVERITY_ICONS] ?? Info;
+          const colors = SEVERITY_COLORS[a.severity as keyof typeof SEVERITY_COLORS] ?? SEVERITY_COLORS.info;
+          return (
+            <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
+              <div className={`p-1.5 rounded-lg ${colors}`}><Icon size={14} /></div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-telivity-navy">{a.description}</p>
+                <p className="text-xs text-telivity-mid-grey mt-0.5">{a.suggestedAction}</p>
+              </div>
+              <span className="text-xs text-telivity-mid-grey whitespace-nowrap">{(a.confidence * 100).toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function NightAudit() {
@@ -51,6 +93,9 @@ export default function NightAudit() {
         <Moon size={24} className="text-telivity-teal" />
         <h1 className="text-2xl font-semibold text-telivity-navy">Night Audit</h1>
       </div>
+
+      {/* AI Anomalies Section */}
+      <AnomalySection propertyId={propertyId} />
 
       {/* Run Audit Panel */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">

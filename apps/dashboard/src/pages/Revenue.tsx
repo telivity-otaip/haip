@@ -58,9 +58,12 @@ const AGENT_LABELS: Record<string, string> = {
   pricing: 'Dynamic Pricing',
   channel_mix: 'Channel Mix',
   overbooking: 'Overbooking',
+  night_audit: 'Night Audit Anomaly',
+  housekeeping: 'Housekeeping Optimizer',
+  cancellation: 'Cancellation Predictor',
 };
 
-const AGENT_TYPES = ['demand_forecast', 'pricing', 'channel_mix', 'overbooking'];
+const AGENT_TYPES = ['demand_forecast', 'pricing', 'channel_mix', 'overbooking', 'night_audit', 'housekeeping', 'cancellation'];
 
 // ---------------------------------------------------------------------------
 // Revenue Dashboard (top KPIs)
