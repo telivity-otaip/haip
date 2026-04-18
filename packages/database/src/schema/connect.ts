@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, jsonb, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, jsonb, integer, text, pgEnum } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
 /**
@@ -27,4 +27,36 @@ export const agentWebhookSubscriptions = pgTable('agent_webhook_subscriptions', 
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Webhook delivery status.
+ */
+export const webhookDeliveryStatusEnum = pgEnum('webhook_delivery_status', [
+  'pending',
+  'delivered',
+  'failed',
+]);
+
+/**
+ * Webhook Deliveries — one row per (event, subscription) pair.
+ * Tracks delivery attempts with retry schedule and HMAC-signed POSTs.
+ */
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  propertyId: uuid('property_id').notNull().references(() => properties.id),
+  subscriptionId: uuid('subscription_id').notNull().references(() => agentWebhookSubscriptions.id),
+
+  eventType: varchar('event_type', { length: 100 }).notNull(),
+  payload: jsonb('payload').notNull(),
+
+  status: webhookDeliveryStatusEnum('status').notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
+  lastStatusCode: integer('last_status_code'),
+  lastError: text('last_error'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
 });

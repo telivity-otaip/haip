@@ -1,6 +1,6 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
-import { agentConfigs, agentDecisions, agentTrainingSnapshots } from '@haip/database';
+import { agentConfigs, agentDecisions, agentTrainingSnapshots, auditLogs } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import type {
@@ -165,6 +165,17 @@ export class AgentService {
       .where(eq(agentDecisions.id, decisionId))
       .returning();
 
+    await this.db.insert(auditLogs).values({
+      propertyId,
+      action: 'update',
+      entityType: 'agent_decision',
+      entityId: decisionId,
+      userId: userId ?? null,
+      previousValue: { status: 'pending' },
+      newValue: { status: 'approved', agentType: decision.agentType, decisionType: decision.decisionType },
+      description: `Agent decision approved and executed: ${decision.agentType}/${decision.decisionType}`,
+    });
+
     await this.webhookService.emit(
       'agent.decision_executed',
       'agent_decision',
@@ -193,6 +204,17 @@ export class AgentService {
       })
       .where(eq(agentDecisions.id, decisionId))
       .returning();
+
+    await this.db.insert(auditLogs).values({
+      propertyId,
+      action: 'update',
+      entityType: 'agent_decision',
+      entityId: decisionId,
+      userId: userId ?? null,
+      previousValue: { status: 'pending' },
+      newValue: { status: 'rejected', reason: reason ?? null },
+      description: `Agent decision rejected: ${decision.agentType}/${decision.decisionType}`,
+    });
 
     return updated;
   }
@@ -260,8 +282,13 @@ export class AgentService {
     return config;
   }
 
-  /** Update agent config. */
-  async updateConfig(propertyId: string, agentType: string, updates: Record<string, unknown>) {
+  /** Update agent config — writes an audit log row describing the diff. */
+  async updateConfig(
+    propertyId: string,
+    agentType: string,
+    updates: Record<string, unknown>,
+    userId?: string,
+  ) {
     const config = await this.getOrCreateConfig(propertyId, agentType);
 
     const setValues: Record<string, unknown> = { updatedAt: new Date() };
@@ -276,6 +303,36 @@ export class AgentService {
       .set(setValues)
       .where(eq(agentConfigs.id, config.id))
       .returning();
+
+    // Build diff of the fields the user actually changed (sensitive config only).
+    const auditFields = ['isEnabled', 'mode', 'autopilotConfidenceThreshold', 'config'];
+    const diff: Record<string, { old: unknown; new: unknown }> = {};
+    for (const field of auditFields) {
+      if (updates[field] === undefined) continue;
+      const oldValue = (config as any)[field];
+      const newValue = (updated as any)[field];
+      // Only record if actually changed (string-compare to handle numeric thresholds).
+      if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+        diff[field] = { old: oldValue, new: newValue };
+      }
+    }
+
+    if (Object.keys(diff).length > 0) {
+      await this.db.insert(auditLogs).values({
+        propertyId,
+        action: 'update',
+        entityType: 'agent_config',
+        entityId: config.id,
+        userId: userId ?? null,
+        previousValue: Object.fromEntries(
+          Object.entries(diff).map(([k, v]) => [k, v.old]),
+        ),
+        newValue: Object.fromEntries(
+          Object.entries(diff).map(([k, v]) => [k, v.new]),
+        ),
+        description: `Agent config updated: ${agentType} (${Object.keys(diff).join(', ')})`,
+      });
+    }
 
     return updated;
   }

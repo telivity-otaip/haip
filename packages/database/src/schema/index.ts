@@ -64,7 +64,11 @@ export {
 } from './channel.js';
 
 // Connect / Agent Subscriptions
-export { agentWebhookSubscriptions } from './connect.js';
+export {
+  agentWebhookSubscriptions,
+  webhookDeliveryStatusEnum,
+  webhookDeliveries,
+} from './connect.js';
 
 // Tax
 export {

@@ -1,13 +1,17 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, gte, desc } from 'drizzle-orm';
 import { agentWebhookSubscriptions, auditLogs } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import type { CreateSubscriptionDto } from './dto/agent-event-subscription.dto';
+import { WebhookDeliveryService } from '../webhook/webhook-delivery.service';
 
 @Injectable()
 export class ConnectEventsService {
-  constructor(@Inject(DRIZZLE) private readonly db: any) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: any,
+    @Optional() private readonly deliveryService?: WebhookDeliveryService,
+  ) {}
 
   /**
    * Create an event subscription for an OTAIP agent.
@@ -174,17 +178,53 @@ export class ConnectEventsService {
     for (const sub of subscriptions) {
       const events = (sub.events ?? []) as string[];
       if (events.some((pattern: string) => this.matchesEventPattern(payload.event, pattern))) {
-        // Log the delivery attempt (no actual HTTP call yet)
-        await this.db
-          .update(agentWebhookSubscriptions)
-          .set({
-            lastDeliveryAt: new Date(),
-            lastDeliveryStatus: 'logged',
-            updatedAt: new Date(),
-          })
-          .where(eq(agentWebhookSubscriptions.id, sub.id));
+        if (this.deliveryService) {
+          // Enqueue a real HTTP delivery (HMAC-signed, retried).
+          await this.deliveryService.enqueue(
+            {
+              eventType: payload.event,
+              propertyId: payload.propertyId,
+              entityType: payload.entityType,
+              entityId: payload.entityId,
+              data: payload.data ?? {},
+              timestamp: payload.timestamp ?? new Date().toISOString(),
+            },
+            sub.id,
+          );
+        } else {
+          // Fallback — just log the match (for tests / environments without delivery service).
+          await this.db
+            .update(agentWebhookSubscriptions)
+            .set({
+              lastDeliveryAt: new Date(),
+              lastDeliveryStatus: 'logged',
+              updatedAt: new Date(),
+            })
+            .where(eq(agentWebhookSubscriptions.id, sub.id));
+        }
       }
     }
+  }
+
+  /**
+   * List delivery attempts for a subscription (scoped by propertyId).
+   */
+  async listDeliveries(subscriptionId: string, propertyId: string, limit = 50) {
+    if (!this.deliveryService) return [];
+    // Verify subscription belongs to propertyId before returning deliveries.
+    const [subscription] = await this.db
+      .select()
+      .from(agentWebhookSubscriptions)
+      .where(
+        and(
+          eq(agentWebhookSubscriptions.id, subscriptionId),
+          eq(agentWebhookSubscriptions.propertyId, propertyId),
+        ),
+      );
+    if (!subscription) {
+      throw new NotFoundException(`Subscription ${subscriptionId} not found`);
+    }
+    return this.deliveryService.listDeliveries(subscriptionId, propertyId, limit);
   }
 
   /**

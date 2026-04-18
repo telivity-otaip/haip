@@ -15,6 +15,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { guestReviews } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { Roles } from '../auth/roles.decorator';
+import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 import { AgentService } from './agent.service';
 import { UpdateAgentConfigDto } from './dto/agent-config.dto';
 import { RejectDecisionDto } from './dto/agent-decision.dto';
@@ -50,8 +51,9 @@ export class AgentController {
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('agentType') agentType: string,
     @Body() dto: UpdateAgentConfigDto,
+    @CurrentUser() user?: AuthUser,
   ) {
-    return this.agentService.updateConfig(propertyId, agentType, dto as any);
+    return this.agentService.updateConfig(propertyId, agentType, dto as any, user?.sub);
   }
 
   @Post(':propertyId/:agentType/run')
@@ -83,8 +85,9 @@ export class AgentController {
   async approveDecision(
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user?: AuthUser,
   ) {
-    return this.agentService.approveDecision(propertyId, id);
+    return this.agentService.approveDecision(propertyId, id, user?.sub);
   }
 
   @Post(':propertyId/decisions/:id/reject')
@@ -93,8 +96,9 @@ export class AgentController {
     @Param('propertyId', ParseUUIDPipe) propertyId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RejectDecisionDto,
+    @CurrentUser() user?: AuthUser,
   ) {
-    return this.agentService.rejectDecision(propertyId, id, undefined, dto.reason);
+    return this.agentService.rejectDecision(propertyId, id, user?.sub, dto.reason);
   }
 
   @Get(':propertyId/:agentType/performance')

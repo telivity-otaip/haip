@@ -131,6 +131,59 @@ describe('ConnectEventsService', () => {
     });
   });
 
+  describe('handleEvent', () => {
+    it('enqueues a delivery via WebhookDeliveryService for each matching subscription', async () => {
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([mockSubscription]),
+        }),
+      }));
+
+      const deliveryService = { enqueue: vi.fn().mockResolvedValue({ id: 'del-1' }) };
+      const svc = new ConnectEventsService(mockDb, deliveryService as any);
+
+      await svc.handleEvent({
+        event: 'reservation.created',
+        entityType: 'reservation',
+        entityId: 'res-1',
+        propertyId: 'prop-1',
+        data: { foo: 'bar' },
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(deliveryService.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: 'reservation.created',
+          propertyId: 'prop-1',
+          entityType: 'reservation',
+          entityId: 'res-1',
+        }),
+        'sub-1',
+      );
+    });
+
+    it('does nothing when no subscriptions match', async () => {
+      mockDb.select.mockImplementation(() => ({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([mockSubscription]),
+        }),
+      }));
+      const deliveryService = { enqueue: vi.fn() };
+      const svc = new ConnectEventsService(mockDb, deliveryService as any);
+
+      await svc.handleEvent({
+        event: 'unrelated.event',
+        entityType: 'x',
+        entityId: 'y',
+        propertyId: 'prop-1',
+        data: {},
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(deliveryService.enqueue).not.toHaveBeenCalled();
+    });
+  });
+
   describe('pollEvents', () => {
     it('should return events filtered by type', async () => {
       const mockEvents = [
