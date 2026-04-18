@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import { Decimal } from 'decimal.js';
-import { payments } from '@haip/database';
+import { payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { FolioService } from '../folio/folio.service';

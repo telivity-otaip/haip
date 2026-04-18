@@ -5,7 +5,7 @@
  * dashboard screen.  Idempotent: uses property code 'TGH' as the anchor and
  * skips if it already exists.
  *
- * Run:  pnpm --filter @haip/database seed
+ * Run:  pnpm --filter @telivityhaip/database seed
  */
 
 import postgres from 'postgres';

@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { channelConnections } from '@haip/database';
+import { channelConnections } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';

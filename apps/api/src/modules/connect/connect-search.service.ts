@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { properties, roomTypes, ratePlans, rateRestrictions } from '@haip/database';
+import { properties, roomTypes, ratePlans, rateRestrictions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
 import type { AgentSearchDto } from './dto/agent-search.dto';

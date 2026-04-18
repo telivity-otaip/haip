@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { auditLogs } from '@haip/database';
-import { type WebhookEvent } from '@haip/shared';
+import { auditLogs } from '@telivityhaip/database';
+import { type WebhookEvent } from '@telivityhaip/shared';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface WebhookPayload {

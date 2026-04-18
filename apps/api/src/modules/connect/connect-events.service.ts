@@ -1,7 +1,7 @@
 import { Injectable, Inject, NotFoundException, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, gte, desc } from 'drizzle-orm';
-import { agentWebhookSubscriptions, auditLogs } from '@haip/database';
+import { agentWebhookSubscriptions, auditLogs } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import type { CreateSubscriptionDto } from './dto/agent-event-subscription.dto';
 import { WebhookDeliveryService } from '../webhook/webhook-delivery.service';

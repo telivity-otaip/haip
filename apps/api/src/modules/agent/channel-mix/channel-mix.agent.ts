@@ -1,6 +1,6 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { eq, and, desc } from 'drizzle-orm';
-import { channelConnections, bookings, reservations, agentDecisions } from '@haip/database';
+import { channelConnections, bookings, reservations, agentDecisions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import type {

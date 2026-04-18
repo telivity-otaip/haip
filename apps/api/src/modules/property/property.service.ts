@@ -1,6 +1,6 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { properties } from '@haip/database';
+import { properties } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';

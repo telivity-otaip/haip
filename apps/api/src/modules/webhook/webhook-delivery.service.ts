@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { createHmac } from 'crypto';
 import { eq, and, lte, or, isNull } from 'drizzle-orm';
-import { webhookDeliveries, agentWebhookSubscriptions } from '@haip/database';
+import { webhookDeliveries, agentWebhookSubscriptions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 
 // Exponential backoff schedule in milliseconds: 30s, 2m, 10m, 1h, 6h.

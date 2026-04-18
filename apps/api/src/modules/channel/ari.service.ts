@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { ariSyncLogs, ratePlans, rateRestrictions } from '@haip/database';
+import { ariSyncLogs, ratePlans, rateRestrictions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
 import { ChannelService } from './channel.service';

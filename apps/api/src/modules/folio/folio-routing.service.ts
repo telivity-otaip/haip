@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { folios, reservations, payments } from '@haip/database';
+import { folios, reservations, payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { FolioService } from './folio.service';
 import { TransferCityLedgerDto } from './dto/transfer-city-ledger.dto';

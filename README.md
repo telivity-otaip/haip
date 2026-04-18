@@ -369,16 +369,16 @@ cp .env.example .env
 pnpm build
 
 # Run database migrations
-pnpm --filter @haip/api run migrate
+pnpm --filter @telivityhaip/api run migrate
 
 # Seed demo data (Telivity Grand Hotel)
-pnpm --filter @haip/api run seed
+pnpm --filter @telivityhaip/api run seed
 
 # Start the API (with hot reload)
 pnpm dev
 
 # In a separate terminal — start the dashboard
-pnpm --filter @haip/dashboard dev
+pnpm --filter @telivityhaip/dashboard dev
 ```
 
 - API: `http://localhost:3000`
@@ -401,10 +401,10 @@ This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a singl
 pnpm test
 
 # API tests only
-pnpm --filter @haip/api test
+pnpm --filter @telivityhaip/api test
 
 # Dashboard component tests
-pnpm --filter @haip/dashboard test
+pnpm --filter @telivityhaip/dashboard test
 
 # Type checking
 pnpm typecheck
