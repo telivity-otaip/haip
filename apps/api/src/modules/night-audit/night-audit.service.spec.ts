@@ -374,7 +374,7 @@ describe('NightAuditService', () => {
     const result = await service.processNoShows('prop-001', '2026-04-06');
     expect(result.count).toBe(1);
     expect(result.reservationIds).toContain('res-001');
-    expect(mockReservationService.markNoShow).toHaveBeenCalledWith('res-001');
+    expect(mockReservationService.markNoShow).toHaveBeenCalledWith('res-001', 'prop-001');
   });
 
   it('should post no-show fee if configured', async () => {

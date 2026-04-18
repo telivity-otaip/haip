@@ -31,10 +31,12 @@ export class InboundReservationService {
     const conn = await this.findConnectionForInbound(channelConnectionId);
     const propertyId = conn.propertyId;
 
-    // Check deduplication
+    // Check deduplication — scoped to the connection's property to prevent
+    // cross-tenant collisions on externalConfirmation + channelCode.
     const existing = await this.findByExternalConfirmation(
       reservation.externalConfirmation,
       reservation.channelCode,
+      propertyId,
     );
 
     if (reservation.status === 'cancelled') {
@@ -199,11 +201,16 @@ export class InboundReservationService {
   private async handleModification(conn: any, reservation: ChannelReservation, existing: any) {
     const propertyId = conn.propertyId;
 
-    // Find the existing reservation linked to this booking
+    // Find the existing reservation linked to this booking — scoped to property.
     const [existingReservation] = await this.db
       .select()
       .from(reservations)
-      .where(eq(reservations.bookingId, existing.id));
+      .where(
+        and(
+          eq(reservations.bookingId, existing.id),
+          eq(reservations.propertyId, propertyId),
+        ),
+      );
 
     if (!existingReservation) {
       throw new NotFoundException('Existing reservation not found for modification');
@@ -233,7 +240,12 @@ export class InboundReservationService {
         specialRequests: reservation.specialRequests,
         updatedAt: new Date(),
       })
-      .where(eq(reservations.id, existingReservation.id))
+      .where(
+        and(
+          eq(reservations.id, existingReservation.id),
+          eq(reservations.propertyId, propertyId),
+        ),
+      )
       .returning();
 
     // Push updated availability
@@ -277,11 +289,16 @@ export class InboundReservationService {
 
     const propertyId = conn.propertyId;
 
-    // Find the reservation
+    // Find the reservation — scoped to property.
     const [existingReservation] = await this.db
       .select()
       .from(reservations)
-      .where(eq(reservations.bookingId, existing.id));
+      .where(
+        and(
+          eq(reservations.bookingId, existing.id),
+          eq(reservations.propertyId, propertyId),
+        ),
+      );
 
     if (!existingReservation) {
       throw new NotFoundException('Existing reservation not found for cancellation');
@@ -296,7 +313,12 @@ export class InboundReservationService {
         cancellationReason: `Cancelled via channel: ${reservation.channelCode}`,
         updatedAt: new Date(),
       })
-      .where(eq(reservations.id, existingReservation.id));
+      .where(
+        and(
+          eq(reservations.id, existingReservation.id),
+          eq(reservations.propertyId, propertyId),
+        ),
+      );
 
     // Push updated availability
     try {
@@ -345,12 +367,17 @@ export class InboundReservationService {
     return conn;
   }
 
-  private async findByExternalConfirmation(externalConfirmation: string, channelCode: string) {
+  private async findByExternalConfirmation(
+    externalConfirmation: string,
+    channelCode: string,
+    propertyId: string,
+  ) {
     const [existing] = await this.db
       .select()
       .from(bookings)
       .where(
         and(
+          eq(bookings.propertyId, propertyId),
           eq(bookings.externalConfirmation, externalConfirmation),
           eq(bookings.channelCode, channelCode),
         ),

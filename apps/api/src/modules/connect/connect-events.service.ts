@@ -46,11 +46,16 @@ export class ConnectEventsService {
   /**
    * Delete (deactivate) a subscription.
    */
-  async deleteSubscription(id: string) {
+  async deleteSubscription(id: string, propertyId: string) {
     const [subscription] = await this.db
       .select()
       .from(agentWebhookSubscriptions)
-      .where(eq(agentWebhookSubscriptions.id, id));
+      .where(
+        and(
+          eq(agentWebhookSubscriptions.id, id),
+          eq(agentWebhookSubscriptions.propertyId, propertyId),
+        ),
+      );
 
     if (!subscription) {
       throw new NotFoundException(`Subscription ${id} not found`);
@@ -59,7 +64,12 @@ export class ConnectEventsService {
     await this.db
       .update(agentWebhookSubscriptions)
       .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(agentWebhookSubscriptions.id, id));
+      .where(
+        and(
+          eq(agentWebhookSubscriptions.id, id),
+          eq(agentWebhookSubscriptions.propertyId, propertyId),
+        ),
+      );
 
     return { deleted: true, id };
   }
@@ -67,11 +77,16 @@ export class ConnectEventsService {
   /**
    * Send a test event to verify a subscription's callback URL.
    */
-  async testSubscription(id: string) {
+  async testSubscription(id: string, propertyId: string) {
     const [subscription] = await this.db
       .select()
       .from(agentWebhookSubscriptions)
-      .where(eq(agentWebhookSubscriptions.id, id));
+      .where(
+        and(
+          eq(agentWebhookSubscriptions.id, id),
+          eq(agentWebhookSubscriptions.propertyId, propertyId),
+        ),
+      );
 
     if (!subscription) {
       throw new NotFoundException(`Subscription ${id} not found`);
@@ -85,7 +100,12 @@ export class ConnectEventsService {
         lastDeliveryStatus: 'test_logged',
         updatedAt: new Date(),
       })
-      .where(eq(agentWebhookSubscriptions.id, id));
+      .where(
+        and(
+          eq(agentWebhookSubscriptions.id, id),
+          eq(agentWebhookSubscriptions.propertyId, propertyId),
+        ),
+      );
 
     return {
       testSent: true,

@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, notInArray, lte, gte, sql } from 'drizzle-orm';
-import { reservations, roomTypes, properties } from '@haip/database';
+import { reservations, roomTypes, properties, rooms } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface AvailabilityResult {
@@ -69,6 +69,25 @@ export class AvailabilityService {
         ),
       );
 
+    // Single grouped query for room counts per room type (avoids N+1).
+    const roomCountRows = await this.db
+      .select({
+        roomTypeId: rooms.roomTypeId,
+        count: sql<number>`count(*)`,
+      })
+      .from(rooms)
+      .where(
+        and(
+          eq(rooms.propertyId, propertyId),
+          eq(rooms.isActive, true),
+        ),
+      )
+      .groupBy(rooms.roomTypeId);
+
+    const roomCountByType = new Map<string, number>(
+      roomCountRows.map((r: any) => [r.roomTypeId, Number(r.count ?? 0)]),
+    );
+
     // Generate date-level availability
     const results: AvailabilityResult[] = [];
     const startDate = new Date(checkIn);
@@ -76,7 +95,7 @@ export class AvailabilityService {
 
     for (const type of types) {
       const totalRooms = type.maxOccupancy
-        ? await this.countRoomsByType(propertyId, type.id)
+        ? (roomCountByType.get(type.id) ?? 0)
         : 0;
 
       for (
@@ -112,18 +131,4 @@ export class AvailabilityService {
     return results;
   }
 
-  private async countRoomsByType(propertyId: string, roomTypeId: string): Promise<number> {
-    const { rooms } = await import('@haip/database');
-    const [result] = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(rooms)
-      .where(
-        and(
-          eq(rooms.propertyId, propertyId),
-          eq(rooms.roomTypeId, roomTypeId),
-          eq(rooms.isActive, true),
-        ),
-      );
-    return Number(result?.count ?? 0);
-  }
 }

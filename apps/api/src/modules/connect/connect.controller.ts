@@ -104,14 +104,22 @@ export class ConnectController {
 
   @Delete('subscriptions/:id')
   @ApiOperation({ summary: 'Unsubscribe from events' })
-  async deleteSubscription(@Param('id', ParseUUIDPipe) id: string) {
-    return this.eventsService.deleteSubscription(id);
+  @ApiQuery({ name: 'propertyId', required: true })
+  async deleteSubscription(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.eventsService.deleteSubscription(id, propertyId);
   }
 
   @Post('subscriptions/:id/test')
   @ApiOperation({ summary: 'Send a test event to verify callback URL' })
-  async testSubscription(@Param('id', ParseUUIDPipe) id: string) {
-    return this.eventsService.testSubscription(id);
+  @ApiQuery({ name: 'propertyId', required: true })
+  async testSubscription(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.eventsService.testSubscription(id, propertyId);
   }
 
   // --- Event Polling ---

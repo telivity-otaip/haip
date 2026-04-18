@@ -25,11 +25,16 @@ export class RatePlanService {
           'Derived rate plans require parentRatePlanId, derivedAdjustmentType, and derivedAdjustmentValue',
         );
       }
-      // Verify parent exists
+      // Verify parent exists — must be in same property
       const [parent] = await this.db
         .select()
         .from(ratePlans)
-        .where(eq(ratePlans.id, dto.parentRatePlanId));
+        .where(
+          and(
+            eq(ratePlans.id, dto.parentRatePlanId),
+            eq(ratePlans.propertyId, dto.propertyId),
+          ),
+        );
       if (!parent) {
         throw new NotFoundException(`Parent rate plan ${dto.parentRatePlanId} not found`);
       }
@@ -55,22 +60,22 @@ export class RatePlanService {
       );
   }
 
-  async findById(id: string) {
+  async findById(id: string, propertyId: string) {
     const [ratePlan] = await this.db
       .select()
       .from(ratePlans)
-      .where(eq(ratePlans.id, id));
+      .where(and(eq(ratePlans.id, id), eq(ratePlans.propertyId, propertyId)));
     if (!ratePlan) {
       throw new NotFoundException(`Rate plan ${id} not found`);
     }
     return ratePlan;
   }
 
-  async update(id: string, dto: UpdateRatePlanDto) {
+  async update(id: string, propertyId: string, dto: UpdateRatePlanDto) {
     const [ratePlan] = await this.db
       .update(ratePlans)
       .set({ ...dto, updatedAt: new Date() })
-      .where(eq(ratePlans.id, id))
+      .where(and(eq(ratePlans.id, id), eq(ratePlans.propertyId, propertyId)))
       .returning();
     if (!ratePlan) {
       throw new NotFoundException(`Rate plan ${id} not found`);
@@ -82,8 +87,11 @@ export class RatePlanService {
    * Calculate the effective rate for a derived rate plan.
    * Follows the parent chain to get the base amount, then applies the adjustment.
    */
-  async calculateDerivedRate(id: string): Promise<{ effectiveRate: number; currency: string }> {
-    const ratePlan = await this.findById(id);
+  async calculateDerivedRate(
+    id: string,
+    propertyId: string,
+  ): Promise<{ effectiveRate: number; currency: string }> {
+    const ratePlan = await this.findById(id, propertyId);
 
     if (ratePlan.type !== 'derived' || !ratePlan.parentRatePlanId) {
       return {
@@ -92,7 +100,7 @@ export class RatePlanService {
       };
     }
 
-    const parent = await this.findById(ratePlan.parentRatePlanId);
+    const parent = await this.findById(ratePlan.parentRatePlanId, propertyId);
     const parentAmount = Number(parent.baseAmount);
     const adjustmentValue = Number(ratePlan.derivedAdjustmentValue);
 
@@ -112,27 +120,46 @@ export class RatePlanService {
 
   // --- Rate Restrictions ---
 
-  async createRestriction(ratePlanId: string, dto: CreateRateRestrictionDto) {
-    await this.findById(ratePlanId); // Verify rate plan exists
+  async createRestriction(
+    ratePlanId: string,
+    propertyId: string,
+    dto: CreateRateRestrictionDto,
+  ) {
+    await this.findById(ratePlanId, propertyId); // Verify rate plan exists + tenant scope
     const [restriction] = await this.db
       .insert(rateRestrictions)
-      .values({ ...dto, ratePlanId })
+      .values({ ...dto, ratePlanId, propertyId })
       .returning();
     return restriction;
   }
 
-  async findRestrictions(ratePlanId: string) {
+  async findRestrictions(ratePlanId: string, propertyId: string) {
+    await this.findById(ratePlanId, propertyId); // Verify rate plan exists + tenant scope
     return this.db
       .select()
       .from(rateRestrictions)
-      .where(eq(rateRestrictions.ratePlanId, ratePlanId));
+      .where(
+        and(
+          eq(rateRestrictions.ratePlanId, ratePlanId),
+          eq(rateRestrictions.propertyId, propertyId),
+        ),
+      );
   }
 
-  async updateRestriction(id: string, dto: UpdateRateRestrictionDto) {
+  async updateRestriction(
+    id: string,
+    propertyId: string,
+    dto: UpdateRateRestrictionDto,
+  ) {
     const [restriction] = await this.db
       .update(rateRestrictions)
       .set({ ...dto, updatedAt: new Date() })
-      .where(eq(rateRestrictions.id, id))
+      .where(
+        and(
+          eq(rateRestrictions.id, id),
+          eq(rateRestrictions.propertyId, propertyId),
+        ),
+      )
       .returning();
     if (!restriction) {
       throw new NotFoundException(`Rate restriction ${id} not found`);
@@ -140,10 +167,15 @@ export class RatePlanService {
     return restriction;
   }
 
-  async deleteRestriction(id: string) {
+  async deleteRestriction(id: string, propertyId: string) {
     const [restriction] = await this.db
       .delete(rateRestrictions)
-      .where(eq(rateRestrictions.id, id))
+      .where(
+        and(
+          eq(rateRestrictions.id, id),
+          eq(rateRestrictions.propertyId, propertyId),
+        ),
+      )
       .returning();
     if (!restriction) {
       throw new NotFoundException(`Rate restriction ${id} not found`);

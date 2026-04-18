@@ -1,12 +1,11 @@
 import { IsUUID, IsOptional, IsEnum, IsDateString, IsInt, Min, Max } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export class ListReservationsDto {
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ description: 'Property ID (required for tenant scoping)' })
   @IsUUID()
-  propertyId?: string;
+  propertyId!: string;
 
   @ApiPropertyOptional({
     enum: ['pending', 'confirmed', 'assigned', 'checked_in', 'stayover', 'due_out', 'checked_out', 'no_show', 'cancelled'],

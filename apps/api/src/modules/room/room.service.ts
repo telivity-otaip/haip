@@ -29,11 +29,11 @@ export class RoomService {
       );
   }
 
-  async findRoomTypeById(id: string) {
+  async findRoomTypeById(id: string, propertyId: string) {
     const [roomType] = await this.db
       .select()
       .from(roomTypes)
-      .where(eq(roomTypes.id, id));
+      .where(and(eq(roomTypes.id, id), eq(roomTypes.propertyId, propertyId)));
     if (!roomType) {
       throw new NotFoundException(`Room type ${id} not found`);
     }

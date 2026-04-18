@@ -161,14 +161,14 @@ describe('ReservationService — checkIn', () => {
   it('should transition state to checked_in', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    const result = await svc.checkIn('res-001');
+    const result = await svc.checkIn('res-001', 'prop-001');
     expect(result.reservation.status).toBe('checked_in');
   });
 
   it('should set checkedInAt and actualArrivalTime', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    const result = await svc.checkIn('res-001');
+    const result = await svc.checkIn('res-001', 'prop-001');
     expect(result.reservation.checkedInAt).toBeDefined();
     expect(result.reservation.actualArrivalTime).toBeDefined();
   });
@@ -176,21 +176,21 @@ describe('ReservationService — checkIn', () => {
   it('should create auto-folio', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    await svc.checkIn('res-001');
+    await svc.checkIn('res-001', 'prop-001');
     expect(mockFolioService.createAutoFolio).toHaveBeenCalled();
   });
 
   it('should mark room occupied', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    await svc.checkIn('res-001');
+    await svc.checkIn('res-001', 'prop-001');
     expect(mockRoomStatusService.markOccupied).toHaveBeenCalledWith('room-001', 'prop-001');
   });
 
   it('should emit reservation.checked_in webhook', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    await svc.checkIn('res-001');
+    await svc.checkIn('res-001', 'prop-001');
     expect(mockWebhookService.emit).toHaveBeenCalledWith(
       'reservation.checked_in',
       'reservation',
@@ -203,7 +203,7 @@ describe('ReservationService — checkIn', () => {
   it('should store encrypted guestIdDocument when ID provided', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    await svc.checkIn('res-001', {
+    await svc.checkIn('res-001', 'prop-001', {
       idType: 'passport',
       idNumber: 'AB123456',
       idCountry: 'US',
@@ -245,7 +245,7 @@ describe('ReservationService — checkIn', () => {
       }),
     };
     const svc = await createService(db);
-    await expect(svc.checkIn('res-001', { roomId: 'room-002' })).rejects.toThrow(
+    await expect(svc.checkIn('res-001', 'prop-001', { roomId: 'room-002' })).rejects.toThrow(
       BadRequestException,
     );
   });
@@ -276,7 +276,7 @@ describe('ReservationService — checkIn', () => {
       }),
     };
     const svc = await createService(db);
-    await expect(svc.checkIn('res-001', { roomId: 'room-002' })).rejects.toThrow(
+    await expect(svc.checkIn('res-001', 'prop-001', { roomId: 'room-002' })).rejects.toThrow(
       BadRequestException,
     );
   });
@@ -307,20 +307,20 @@ describe('ReservationService — checkIn', () => {
       }),
     };
     const svc = await createService(db);
-    await expect(svc.checkIn('res-001')).rejects.toThrow(BadRequestException);
+    await expect(svc.checkIn('res-001', 'prop-001')).rejects.toThrow(BadRequestException);
   });
 
   it('should reject DNR guest', async () => {
     const dnrGuest = { ...mockGuest, isDnr: true };
     const db = createCheckInDb({ guest: dnrGuest });
     const svc = await createService(db);
-    await expect(svc.checkIn('res-001')).rejects.toThrow(BadRequestException);
+    await expect(svc.checkIn('res-001', 'prop-001')).rejects.toThrow(BadRequestException);
   });
 
   it('should call paymentService.authorizePayment when token provided', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    await svc.checkIn('res-001', {
+    await svc.checkIn('res-001', 'prop-001', {
       gatewayPaymentToken: 'tok_test_123',
       gatewayProvider: 'stripe',
     });
@@ -335,7 +335,7 @@ describe('ReservationService — checkIn', () => {
   it('should skip deposit auth when skipDepositAuth is true', async () => {
     const db = createCheckInDb();
     const svc = await createService(db);
-    await svc.checkIn('res-001', {
+    await svc.checkIn('res-001', 'prop-001', {
       skipDepositAuth: true,
       gatewayPaymentToken: 'tok_test_123',
     });
@@ -348,7 +348,7 @@ describe('ReservationService — checkIn', () => {
     );
     const db = createCheckInDb();
     const svc = await createService(db);
-    const result = await svc.checkIn('res-001', {
+    const result = await svc.checkIn('res-001', 'prop-001', {
       gatewayPaymentToken: 'tok_test_fail',
       gatewayProvider: 'stripe',
     });
@@ -361,7 +361,7 @@ describe('ReservationService — checkIn', () => {
     const earlyProperty = { ...mockProperty, checkInTime: '23:59', settings: { earlyCheckInFee: 50 } };
     const db = createCheckInDb({ property: earlyProperty });
     const svc = await createService(db);
-    const result = await svc.checkIn('res-001');
+    const result = await svc.checkIn('res-001', 'prop-001');
     const updateCall = db.update.mock.results[0].value.set.mock.calls[0][0];
     expect(updateCall.isEarlyCheckin).toBe(true);
   });
@@ -370,7 +370,7 @@ describe('ReservationService — checkIn', () => {
     const earlyProperty = { ...mockProperty, checkInTime: '23:59', settings: { earlyCheckInFee: 50 } };
     const db = createCheckInDb({ property: earlyProperty });
     const svc = await createService(db);
-    await svc.checkIn('res-001');
+    await svc.checkIn('res-001', 'prop-001');
     expect(mockFolioService.postCharge).toHaveBeenCalledWith(
       'folio-001',
       expect.objectContaining({

@@ -45,10 +45,14 @@ export class RoomController {
 
   @Get('types/:id')
   @ApiOperation({ summary: 'Get room type by ID' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room type found' })
   @ApiResponse({ status: 404, description: 'Room type not found' })
-  getRoomTypeById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.roomService.findRoomTypeById(id);
+  getRoomTypeById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.roomService.findRoomTypeById(id, propertyId);
   }
 
   // --- Room status routes (before :id to avoid conflicts) ---
