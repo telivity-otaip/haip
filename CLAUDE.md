@@ -36,6 +36,29 @@ Architecture: Option B — PMS is standalone, OTAIP agents connect via API (not 
 - Tests required for all business logic
 - Use the webhook event pattern: entity.action (e.g., reservation.created)
 
+## Multi-tenancy enforcement (non-negotiable)
+
+Every service method that queries a table with `propertyId` MUST filter by it
+alongside any id filter. This applies to reads, updates, and deletes — even
+for methods called only internally, because future controllers may call them.
+
+- `WHERE id = $1` on a property-scoped table is a BUG. Use
+  `and(eq(table.id, id), eq(table.propertyId, propertyId))`.
+- Controllers: `propertyId` is a REQUIRED query param (UUID-validated) on every
+  `:id` route, not optional. List endpoints also require it.
+- `propertyId` must come from the request, never inferred from other entity
+  lookups (that creates a confused-deputy bug — the attacker supplies the id,
+  the server derives a matching propertyId, scoping becomes a no-op).
+- Exceptions — document the reason in a code comment when you deviate:
+  - `guests` table: cross-property by design (one person stays at multiple hotels)
+  - `properties` table: the property IS the tenant
+  - Connect API (`/api/v1/connect/*`): bearer-credential model via
+    `confirmationNumber` — scoped by credential possession, not propertyId
+  - Internal cron/webhook receivers invoked with trusted server-side ids
+
+When adding a new controller route or service method that touches a
+property-scoped table, the WHERE clause is the first thing to verify.
+
 ## Project Structure
 
 ```
