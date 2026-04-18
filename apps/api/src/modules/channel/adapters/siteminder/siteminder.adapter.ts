@@ -32,7 +32,7 @@ export class SiteMinderAdapter implements ChannelAdapter {
    * Push availability + restrictions combined (SiteMinder convention).
    */
   async pushAvailability(params: AvailabilityPushParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig();
+    const config = this.resolveConfig(params.connectionConfig);
     const payload = mapAvailabilityToOta(config.hotelCode, params.items);
     const soap = buildSoapEnvelope(
       'OTA_HotelAvailNotifRQ',
@@ -58,7 +58,7 @@ export class SiteMinderAdapter implements ChannelAdapter {
   }
 
   async pushRates(params: RatePushParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig();
+    const config = this.resolveConfig(params.connectionConfig);
     const payload = mapRatesToOta(config.hotelCode, params.items);
     const soap = buildSoapEnvelope(
       'OTA_HotelRateAmountNotifRQ',
@@ -88,7 +88,7 @@ export class SiteMinderAdapter implements ChannelAdapter {
    * This method is a passthrough that builds a combined availability+restriction push.
    */
   async pushRestrictions(params: RestrictionPushParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig();
+    const config = this.resolveConfig(params.connectionConfig);
     // Build availability items from restriction items (zero availability = stop sell)
     const availItems = params.items.map((item) => ({
       channelRoomCode: item.channelRoomCode,
@@ -125,7 +125,7 @@ export class SiteMinderAdapter implements ChannelAdapter {
    * Pull reservations via ReadRQ (SiteMinder is pull-only, no webhook push).
    */
   async pullReservations(params: ReservationPullParams): Promise<ChannelReservationResult> {
-    const config = this.resolveConfig();
+    const config = this.resolveConfig(params.connectionConfig);
 
     const readBody: Record<string, unknown> = {
       ReadRequests: {
@@ -167,7 +167,7 @@ export class SiteMinderAdapter implements ChannelAdapter {
    * SiteMinder re-sends unconfirmed reservations on next poll.
    */
   async confirmReservation(params: ConfirmReservationParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig();
+    const config = this.resolveConfig(params.connectionConfig);
     const payload = buildNotifConfirmation(config.hotelCode, [
       {
         externalConfirmation: params.externalConfirmation,
@@ -293,29 +293,33 @@ export class SiteMinderAdapter implements ChannelAdapter {
     };
   }
 
-  private resolveConfig(): SiteMinderConfig {
-    return {
-      hotelCode: this.configService.get<string>('SITEMINDER_HOTEL_CODE', 'MOCK_SM_HOTEL'),
-      username: this.configService.get<string>('SITEMINDER_USERNAME', 'haip_test'),
-      password: this.configService.get<string>('SITEMINDER_PASSWORD', 'test_password'),
-      baseUrl: this.configService.get<string>(
-        'SITEMINDER_BASE_URL',
-        DEFAULT_SITEMINDER_CONFIG.baseUrl!,
-      ),
-      timeoutMs: DEFAULT_SITEMINDER_CONFIG.timeoutMs,
-      maxRetries: DEFAULT_SITEMINDER_CONFIG.maxRetries,
-    };
+  /**
+   * Resolve SiteMinder config.
+   * Prefers per-connection credentials from channelConnections.config (passed via params.connectionConfig);
+   * falls back to env vars only when a value is missing from the connection record.
+   */
+  private resolveConfig(connectionConfig?: Record<string, unknown>): SiteMinderConfig {
+    return this.buildConfig(connectionConfig ?? {});
   }
 
   private buildConfig(config: Record<string, unknown>): SiteMinderConfig {
+    const hotelCode = config['hotelCode'];
+    const username = config['username'];
+    const password = config['password'];
+    const baseUrl = config['baseUrl'];
     return {
-      hotelCode: String(config['hotelCode'] ?? this.configService.get<string>('SITEMINDER_HOTEL_CODE', 'MOCK_SM_HOTEL')),
-      username: String(config['username'] ?? this.configService.get<string>('SITEMINDER_USERNAME', 'haip_test')),
-      password: String(config['password'] ?? this.configService.get<string>('SITEMINDER_PASSWORD', 'test_password')),
-      baseUrl: String(
-        config['baseUrl'] ??
-          this.configService.get<string>('SITEMINDER_BASE_URL', DEFAULT_SITEMINDER_CONFIG.baseUrl!),
-      ),
+      hotelCode: hotelCode != null && hotelCode !== ''
+        ? String(hotelCode)
+        : this.configService.get<string>('SITEMINDER_HOTEL_CODE', 'MOCK_SM_HOTEL'),
+      username: username != null && username !== ''
+        ? String(username)
+        : this.configService.get<string>('SITEMINDER_USERNAME', 'haip_test'),
+      password: password != null && password !== ''
+        ? String(password)
+        : this.configService.get<string>('SITEMINDER_PASSWORD', 'test_password'),
+      baseUrl: baseUrl != null && baseUrl !== ''
+        ? String(baseUrl)
+        : this.configService.get<string>('SITEMINDER_BASE_URL', DEFAULT_SITEMINDER_CONFIG.baseUrl!),
       timeoutMs: DEFAULT_SITEMINDER_CONFIG.timeoutMs,
       maxRetries: DEFAULT_SITEMINDER_CONFIG.maxRetries,
     };

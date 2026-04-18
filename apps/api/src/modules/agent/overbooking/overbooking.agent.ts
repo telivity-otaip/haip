@@ -51,25 +51,40 @@ export class OverbookingAgent implements HaipAgent, OnModuleInit {
     futureEnd.setDate(futureEnd.getDate() + 14);
     const futureEndStr = futureEnd.toISOString().split('T')[0]!;
 
+    // Pull any reservation whose stay overlaps the next-14-day window.
+    // A reservation arriving day -3 and departing day +1 occupies the target dates from day 0 to day 0.
     const futureRes = await this.db
       .select({
         arrivalDate: reservations.arrivalDate,
+        departureDate: reservations.departureDate,
         status: reservations.status,
       })
       .from(reservations)
       .where(
         and(
           eq(reservations.propertyId, propertyId),
-          gte(reservations.arrivalDate, today),
           lte(reservations.arrivalDate, futureEndStr),
+          gte(reservations.departureDate, today),
           not(inArray(reservations.status, ['cancelled'] as any)),
         ),
       );
 
+    // Expand each reservation across every occupied night [arrivalDate, departureDate)
+    // so counts reflect all stayovers, not just arrivals.
     const otb = new Map<string, number>();
+    const windowStart = new Date(today);
+    const windowEnd = new Date(futureEndStr);
     for (const r of futureRes) {
-      const date = r.arrivalDate as string;
-      otb.set(date, (otb.get(date) ?? 0) + 1);
+      const arrival = new Date(r.arrivalDate as string);
+      const departure = r.departureDate ? new Date(r.departureDate as string) : new Date(arrival.getTime() + 86400000);
+      const nights = Math.max(1, Math.ceil((departure.getTime() - arrival.getTime()) / 86400000));
+      for (let n = 0; n < nights; n++) {
+        const d = new Date(arrival);
+        d.setDate(d.getDate() + n);
+        if (d < windowStart || d > windowEnd) continue;
+        const dateStr = d.toISOString().split('T')[0]!;
+        otb.set(dateStr, (otb.get(dateStr) ?? 0) + 1);
+      }
     }
 
     // Historical no-show rate

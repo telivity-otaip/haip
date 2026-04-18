@@ -73,6 +73,9 @@ describe('InboundReservationService', () => {
         }),
       }),
     };
+    // Transactions just run the callback with the same mock — the tx-scoped insert/select
+    // queries still hit the shared mocks configured above.
+    mockDb.transaction = vi.fn().mockImplementation((cb: any) => cb(mockDb));
 
     mockChannelService = {
       findById: vi.fn().mockResolvedValue(mockConnection),

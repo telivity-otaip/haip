@@ -89,6 +89,7 @@ export class AriService {
       const result = await adapter.pushAvailability({
         propertyId,
         channelConnectionId: conn.id,
+        connectionConfig: (conn.config ?? {}) as Record<string, unknown>,
         items,
       });
 
@@ -190,12 +191,13 @@ export class AriService {
 
       const adapter = this.adapterFactory.getAdapter(conn.adapterType);
 
+      const connectionConfig = (conn.config ?? {}) as Record<string, unknown>;
       const rateResult = rateItems.length > 0
-        ? await adapter.pushRates({ propertyId, channelConnectionId: conn.id, items: rateItems })
+        ? await adapter.pushRates({ propertyId, channelConnectionId: conn.id, connectionConfig, items: rateItems })
         : { success: true, itemsSynced: 0, errors: [] };
 
       const restrictionResult = restrictionItems.length > 0
-        ? await adapter.pushRestrictions({ propertyId, channelConnectionId: conn.id, items: restrictionItems })
+        ? await adapter.pushRestrictions({ propertyId, channelConnectionId: conn.id, connectionConfig, items: restrictionItems })
         : { success: true, itemsSynced: 0, errors: [] };
 
       // Log syncs
@@ -282,6 +284,7 @@ export class AriService {
     const result = await adapter.pushAvailability({
       propertyId,
       channelConnectionId,
+      connectionConfig: (conn.config ?? {}) as Record<string, unknown>,
       items,
     });
 
@@ -305,6 +308,27 @@ export class AriService {
       }
     } catch {
       // Fire-and-forget: don't crash on push failure
+    }
+  }
+
+  @OnEvent('reservation.modified')
+  async handleReservationModified(payload: WebhookPayload) {
+    if (!payload.propertyId) return;
+    try {
+      const data = payload.data as Record<string, unknown>;
+      // Push availability for both old and new windows so channels see the freed + taken inventory.
+      const arrivalDate = data['arrivalDate'] as string | undefined;
+      const departureDate = data['departureDate'] as string | undefined;
+      const prevArrival = data['previousArrivalDate'] as string | undefined;
+      const prevDeparture = data['previousDepartureDate'] as string | undefined;
+      if (arrivalDate && departureDate) {
+        await this.pushAvailability(payload.propertyId, arrivalDate, departureDate);
+      }
+      if (prevArrival && prevDeparture && (prevArrival !== arrivalDate || prevDeparture !== departureDate)) {
+        await this.pushAvailability(payload.propertyId, prevArrival, prevDeparture);
+      }
+    } catch {
+      // Fire-and-forget
     }
   }
 

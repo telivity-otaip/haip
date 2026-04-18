@@ -26,9 +26,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   override canActivate(context: ExecutionContext) {
-    // If auth is disabled (dev/testing), allow all requests
-    const authEnabled = this.configService.get<string>('AUTH_ENABLED', 'false');
-    if (authEnabled !== 'true') {
+    // Secure-by-default: auth is ON unless AUTH_ENABLED is explicitly set to 'false'.
+    // Previously this defaulted to 'false' and skipped auth whenever unset — a fail-open bug.
+    const authEnabled = this.configService.get<string>('AUTH_ENABLED', 'true');
+    if (authEnabled === 'false') {
       return true;
     }
 

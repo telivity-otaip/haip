@@ -1,6 +1,6 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { eq, and, gte, not, inArray } from 'drizzle-orm';
-import { reservations, guests, folios, payments } from '@haip/database';
+import { reservations, guests, folios, payments, bookings } from '@haip/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import type {
@@ -36,10 +36,16 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
   async analyze(propertyId: string, _context?: AgentContext): Promise<AgentAnalysis> {
     const today = new Date().toISOString().split('T')[0]!;
 
-    // Get active reservations (confirmed, pending)
-    const activeRes = await this.db
-      .select()
+    // Get active reservations (confirmed, pending) joined with their booking so we can
+    // see the real booking source. `source` lives on `bookings`, not on `reservations`.
+    const activeResRaw = await this.db
+      .select({
+        reservation: reservations,
+        bookingSource: bookings.source,
+        bookingChannelCode: bookings.channelCode,
+      })
       .from(reservations)
+      .leftJoin(bookings, eq(reservations.bookingId, bookings.id))
       .where(
         and(
           eq(reservations.propertyId, propertyId),
@@ -47,6 +53,12 @@ export class CancellationPredictorAgent implements HaipAgent, OnModuleInit {
           not(inArray(reservations.status, ['cancelled', 'checked_out', 'no_show'] as any)),
         ),
       );
+
+    const activeRes = activeResRaw.map((row: any) => ({
+      ...row.reservation,
+      source: row.bookingSource ?? null,
+      channelCode: row.bookingChannelCode ?? null,
+    }));
 
     // Get guest data for VIP/repeat detection
     const guestIds = [...new Set(activeRes.map((r: any) => r.guestId).filter(Boolean))];

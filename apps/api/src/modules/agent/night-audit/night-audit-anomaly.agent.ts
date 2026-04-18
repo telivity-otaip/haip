@@ -37,14 +37,17 @@ export class NightAuditAnomalyAgent implements HaipAgent, OnModuleInit {
   async analyze(propertyId: string, _context?: AgentContext): Promise<AgentAnalysis> {
     const today = new Date().toISOString().split('T')[0]!;
 
-    // Get checked-in reservations (should have charges posted)
+    // Get in-house + recently checked-out reservations (should have charges posted).
+    // Include checked_out so payment-mismatch detection has a reachable trigger —
+    // previously the mismatch rule required status === 'checked_out' but the query
+    // only selected in-house statuses, making the rule dead code.
     const checkedIn = await this.db
       .select()
       .from(reservations)
       .where(
         and(
           eq(reservations.propertyId, propertyId),
-          inArray(reservations.status, ['checked_in', 'stayover', 'due_out'] as any),
+          inArray(reservations.status, ['checked_in', 'stayover', 'due_out', 'checked_out'] as any),
         ),
       );
 
@@ -176,7 +179,10 @@ export class NightAuditAnomalyAgent implements HaipAgent, OnModuleInit {
           const totalChargesAmt = parseFloat(folio.totalCharges ?? '0');
           const totalPaymentsAmt = parseFloat(folio.totalPayments ?? '0');
           const balance = Math.abs(totalChargesAmt - totalPaymentsAmt);
-          if (totalChargesAmt > 0 && balance > 0.01 && res.status === 'checked_out') {
+          // Payment mismatch is an anomaly when the stay has ended (due_out / checked_out)
+          // but the folio is still open with a non-zero balance.
+          const mismatchStatuses = ['due_out', 'checked_out'];
+          if (totalChargesAmt > 0 && balance > 0.01 && mismatchStatuses.includes(res.status)) {
             anomalies.push({
               anomalyType: 'payment_mismatch',
               severity: getSeverity('payment_mismatch'),

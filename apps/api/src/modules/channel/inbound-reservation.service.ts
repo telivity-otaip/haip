@@ -68,6 +68,7 @@ export class InboundReservationService {
     const result = await adapter.pullReservations({
       propertyId,
       channelConnectionId,
+      connectionConfig: (conn.config ?? {}) as Record<string, unknown>,
       since,
     });
 
@@ -98,12 +99,9 @@ export class InboundReservationService {
   private async handleNewReservation(conn: any, reservation: ChannelReservation) {
     const propertyId = conn.propertyId;
 
-    // Resolve channel codes to PMS IDs
+    // Resolve channel codes to PMS IDs (outside tx — pure lookups)
     const roomTypeId = this.resolveRoomTypeId(conn, reservation.channelRoomCode);
     const ratePlanId = this.resolveRatePlanId(conn, reservation.channelRateCode);
-
-    // Find or create guest
-    const guest = await this.findOrCreateGuest(reservation);
 
     // Calculate nights
     const arrival = new Date(reservation.arrivalDate);
@@ -113,45 +111,51 @@ export class InboundReservationService {
     // Generate confirmation number
     const confirmationNumber = this.generateConfirmationNumber();
 
-    // Create booking
-    const [booking] = await this.db
-      .insert(bookings)
-      .values({
-        propertyId,
-        guestId: guest.id,
-        confirmationNumber,
-        externalConfirmation: reservation.externalConfirmation,
-        source: 'ota',
-        channelCode: reservation.channelCode,
-      })
-      .returning();
+    // Atomically create guest + booking + reservation so we never end up with a half-written record.
+    const { guest, booking, pmsReservation } = await this.db.transaction(async (tx: any) => {
+      const guest = await this.findOrCreateGuestTx(tx, reservation);
 
-    // Create reservation
-    const [pmsReservation] = await this.db
-      .insert(reservations)
-      .values({
-        propertyId,
-        bookingId: booking.id,
-        guestId: guest.id,
-        arrivalDate: reservation.arrivalDate,
-        departureDate: reservation.departureDate,
-        nights,
-        roomTypeId,
-        ratePlanId,
-        totalAmount: reservation.totalAmount.toString(),
-        currencyCode: reservation.currencyCode,
-        adults: reservation.adults,
-        children: reservation.children ?? 0,
-        specialRequests: reservation.specialRequests,
-        status: 'confirmed',
-      })
-      .returning();
+      const [booking] = await tx
+        .insert(bookings)
+        .values({
+          propertyId,
+          guestId: guest.id,
+          confirmationNumber,
+          externalConfirmation: reservation.externalConfirmation,
+          source: 'ota',
+          channelCode: reservation.channelCode,
+        })
+        .returning();
+
+      const [pmsReservation] = await tx
+        .insert(reservations)
+        .values({
+          propertyId,
+          bookingId: booking.id,
+          guestId: guest.id,
+          arrivalDate: reservation.arrivalDate,
+          departureDate: reservation.departureDate,
+          nights,
+          roomTypeId,
+          ratePlanId,
+          totalAmount: reservation.totalAmount.toString(),
+          currencyCode: reservation.currencyCode,
+          adults: reservation.adults,
+          children: reservation.children ?? 0,
+          specialRequests: reservation.specialRequests,
+          status: 'confirmed',
+        })
+        .returning();
+
+      return { guest, booking, pmsReservation };
+    });
 
     // Confirm back to channel
     try {
       const adapter = this.adapterFactory.getAdapter(conn.adapterType);
       await adapter.confirmReservation({
         channelConnectionId: conn.id,
+        connectionConfig: (conn.config ?? {}) as Record<string, unknown>,
         externalConfirmation: reservation.externalConfirmation,
         pmsConfirmationNumber: confirmationNumber,
       });
@@ -352,6 +356,26 @@ export class InboundReservationService {
         ),
       );
     return existing ?? null;
+  }
+
+  private async findOrCreateGuestTx(tx: any, reservation: ChannelReservation) {
+    if (reservation.guestEmail) {
+      const [existing] = await tx
+        .select()
+        .from(guests)
+        .where(eq(guests.email, reservation.guestEmail));
+      if (existing) return existing;
+    }
+    const [guest] = await tx
+      .insert(guests)
+      .values({
+        firstName: reservation.guestFirstName,
+        lastName: reservation.guestLastName,
+        email: reservation.guestEmail ?? null,
+        phone: reservation.guestPhone ?? null,
+      })
+      .returning();
+    return guest;
   }
 
   private async findOrCreateGuest(reservation: ChannelReservation) {

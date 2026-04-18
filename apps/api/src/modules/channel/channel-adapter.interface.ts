@@ -20,6 +20,11 @@ export interface ChannelAdapter {
 export interface AvailabilityPushParams {
   propertyId: string;
   channelConnectionId: string;
+  /**
+   * Per-connection credentials/config from channelConnections.config.
+   * Adapters use this when set; fall back to env vars only when missing.
+   */
+  connectionConfig?: Record<string, unknown>;
   items: Array<{
     channelRoomCode: string;
     date: string;
@@ -31,6 +36,7 @@ export interface AvailabilityPushParams {
 export interface RatePushParams {
   propertyId: string;
   channelConnectionId: string;
+  connectionConfig?: Record<string, unknown>;
   items: Array<{
     channelRoomCode: string;
     channelRateCode: string;
@@ -46,6 +52,7 @@ export interface RatePushParams {
 export interface RestrictionPushParams {
   propertyId: string;
   channelConnectionId: string;
+  connectionConfig?: Record<string, unknown>;
   items: Array<{
     channelRoomCode: string;
     channelRateCode: string;
@@ -61,6 +68,7 @@ export interface RestrictionPushParams {
 export interface ReservationPullParams {
   propertyId: string;
   channelConnectionId: string;
+  connectionConfig?: Record<string, unknown>;
   since?: Date;
 }
 
@@ -87,12 +95,14 @@ export interface ChannelReservation {
 
 export interface ConfirmReservationParams {
   channelConnectionId: string;
+  connectionConfig?: Record<string, unknown>;
   externalConfirmation: string;
   pmsConfirmationNumber: string;
 }
 
 export interface CancelReservationParams {
   channelConnectionId: string;
+  connectionConfig?: Record<string, unknown>;
   externalConfirmation: string;
   reason?: string;
 }

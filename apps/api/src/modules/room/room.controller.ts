@@ -97,10 +97,14 @@ export class RoomController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get room by ID' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room found' })
   @ApiResponse({ status: 404, description: 'Room not found' })
-  getRoomById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.roomService.findRoomById(id);
+  getRoomById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.roomService.findRoomById(id, propertyId);
   }
 
   @Patch(':id/status')
@@ -120,12 +124,14 @@ export class RoomController {
   @Patch(':id')
   @Roles('admin', 'front_desk', 'housekeeping_manager')
   @ApiOperation({ summary: 'Update room' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room updated' })
   @ApiResponse({ status: 404, description: 'Room not found' })
   updateRoom(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateRoomDto,
   ) {
-    return this.roomService.updateRoom(id, dto);
+    return this.roomService.updateRoom(id, propertyId, dto);
   }
 }

@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   forwardRef,
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
@@ -114,6 +115,20 @@ export class ReservationService {
       return { ...reservation, booking };
     });
 
+    // Emit reservation.created so channel manager / ARI can push updated availability.
+    await this.webhookService.emit(
+      'reservation.created',
+      'reservation',
+      result.id,
+      {
+        reservationId: result.id,
+        arrivalDate: result.arrivalDate,
+        departureDate: result.departureDate,
+        roomTypeId: result.roomTypeId,
+      },
+      dto.propertyId,
+    );
+
     return result;
   }
 
@@ -176,6 +191,22 @@ export class ReservationService {
       })
       .where(eq(reservations.id, id))
       .returning();
+
+    // Emit reservation.cancelled so channel manager / ARI can push updated availability.
+    await this.webhookService.emit(
+      'reservation.cancelled',
+      'reservation',
+      updated.id,
+      {
+        reservationId: updated.id,
+        arrivalDate: updated.arrivalDate,
+        departureDate: updated.departureDate,
+        roomTypeId: updated.roomTypeId,
+        cancellationReason: dto.cancellationReason,
+      },
+      updated.propertyId,
+    );
+
     return updated;
   }
 
@@ -583,6 +614,10 @@ export class ReservationService {
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
 
+    const arrivalChanged = dto.arrivalDate && dto.arrivalDate !== reservation.arrivalDate;
+    const departureChanged = dto.departureDate && dto.departureDate !== reservation.departureDate;
+    const roomTypeChanged = dto.roomTypeId && dto.roomTypeId !== reservation.roomTypeId;
+
     if (dto.arrivalDate || dto.departureDate) {
       const arrival = dto.arrivalDate ?? reservation.arrivalDate;
       const departure = dto.departureDate ?? reservation.departureDate;
@@ -606,11 +641,69 @@ export class ReservationService {
     if (dto.specialRequests !== undefined)
       updates['specialRequests'] = dto.specialRequests;
 
+    // If dates or room type change, re-check availability on the new window.
+    // The existing reservation still occupies its old window (and room type) in searchAvailability,
+    // so if roomType is unchanged we must exclude it from the count to avoid blocking itself on overlap.
+    if (arrivalChanged || departureChanged || roomTypeChanged) {
+      const newArrival = (dto.arrivalDate ?? reservation.arrivalDate) as string;
+      const newDeparture = (dto.departureDate ?? reservation.departureDate) as string;
+      const newRoomTypeId = (dto.roomTypeId ?? reservation.roomTypeId) as string;
+
+      const availability = await this.availabilityService.searchAvailability(
+        reservation.propertyId,
+        newArrival,
+        newDeparture,
+        newRoomTypeId,
+      );
+
+      // Check each night in the requested window has availability.
+      // If the reservation currently occupies the same room type and overlaps the new window,
+      // it was counted as "sold" — give it back one unit when evaluating.
+      const currentCountsItself = !roomTypeChanged &&
+        reservation.arrivalDate < newDeparture &&
+        reservation.departureDate > newArrival;
+
+      const nightsOk = availability
+        .filter((a: any) => a.roomTypeId === newRoomTypeId)
+        .every((a: any) => {
+          const existingOccupiesThisNight =
+            currentCountsItself &&
+            (reservation.arrivalDate as string) <= a.date &&
+            (reservation.departureDate as string) > a.date;
+          const effectiveAvailable = a.available + (existingOccupiesThisNight ? 1 : 0);
+          return effectiveAvailable > 0;
+        });
+
+      if (!nightsOk) {
+        throw new ConflictException(
+          `No availability for room type ${newRoomTypeId} on ${newArrival} → ${newDeparture}`,
+        );
+      }
+    }
+
     const [updated] = await this.db
       .update(reservations)
       .set(updates)
       .where(eq(reservations.id, id))
       .returning();
+
+    // Emit reservation.modified so channel manager / ARI can push updated availability.
+    await this.webhookService.emit(
+      'reservation.modified',
+      'reservation',
+      updated.id,
+      {
+        reservationId: updated.id,
+        arrivalDate: updated.arrivalDate,
+        departureDate: updated.departureDate,
+        roomTypeId: updated.roomTypeId,
+        previousArrivalDate: reservation.arrivalDate,
+        previousDepartureDate: reservation.departureDate,
+        previousRoomTypeId: reservation.roomTypeId,
+      },
+      updated.propertyId,
+    );
+
     return updated;
   }
 
