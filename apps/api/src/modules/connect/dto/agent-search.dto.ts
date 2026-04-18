@@ -7,6 +7,7 @@ import {
   IsArray,
   IsBoolean,
   Min,
+  Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -83,10 +84,13 @@ export class AgentSearchDto {
   accessibleOnly?: boolean;
 
   // Pagination
-  @ApiPropertyOptional({ default: 20 })
+  // Bug 7: enforce a hard upper bound so agents cannot request arbitrarily
+  // large pages and exhaust the database.
+  @ApiPropertyOptional({ default: 20, maximum: 100 })
   @IsOptional()
   @IsNumber()
   @Min(1)
+  @Max(100)
   limit?: number;
 
   @ApiPropertyOptional({ default: 0 })

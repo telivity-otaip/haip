@@ -59,12 +59,19 @@ describe('ConnectSearchService', () => {
   };
 
   beforeEach(() => {
+    // Bug 7: findProperties now pushes pagination to SQL when no propertyId
+    // is provided. Most tests here hit the propertyId branch which still
+    // terminates on .where(). For city-search pagination we add .limit().offset()
+    // to the chain below.
     mockDb = {
       select: vi.fn().mockImplementation(() => ({
         from: vi.fn().mockImplementation(() => ({
           where: vi.fn().mockImplementation(() => {
-            // Default: return empty for most queries
-            return Promise.resolve([]);
+            const p: any = Promise.resolve([]);
+            p.limit = vi.fn().mockReturnValue({
+              offset: vi.fn().mockResolvedValue([]),
+            });
+            return p;
           }),
         })),
       })),

@@ -290,7 +290,9 @@ export class PaymentService {
     if (!original) {
       throw new NotFoundException(`Payment ${id} not found`);
     }
-    if (!['captured', 'settled'].includes(original.status)) {
+    // Bug 3: allow multiple partial refunds — entry from captured, settled,
+    // AND partially_refunded. Only `refunded` (fully refunded) is terminal.
+    if (!['captured', 'settled', 'partially_refunded'].includes(original.status)) {
       throw new BadRequestException(
         `Cannot refund payment with status '${original.status}'`,
       );
@@ -303,17 +305,42 @@ export class PaymentService {
     if (refundAmountDec.lte(0)) {
       throw new BadRequestException('Refund amount must be positive');
     }
-    if (refundAmountDec.gt(originalAmountDec)) {
-      throw new BadRequestException('Refund amount cannot exceed original payment amount');
+
+    // Bug 3: sum existing refunds to compute remaining refundable amount.
+    // Refund rows live in the same `payments` table with originalPaymentId
+    // pointing back to the captured payment, stored as negative amounts.
+    const existingRefunds = await this.db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.originalPaymentId, id),
+          eq(payments.propertyId, propertyId),
+        ),
+      );
+    const alreadyRefundedDec = (existingRefunds ?? []).reduce(
+      (sum: Decimal, r: any) => sum.plus(new Decimal(r.amount).abs()),
+      new Decimal(0),
+    );
+    const remainingDec = originalAmountDec.minus(alreadyRefundedDec);
+
+    if (refundAmountDec.gt(remainingDec)) {
+      throw new BadRequestException(
+        `Refund amount ${refundAmountDec.toFixed(2)} exceeds remaining refundable amount ${remainingDec.toFixed(2)}`,
+      );
     }
-    const isPartial = refundAmountDec.lt(originalAmountDec);
-    const newStatus = isPartial ? 'partially_refunded' : 'refunded';
+
+    // After this refund, will the total reach the original? If so, mark the
+    // original fully refunded; otherwise leave (or set) to partially_refunded.
+    const totalAfterDec = alreadyRefundedDec.plus(refundAmountDec);
+    const fullyRefundedAfter = totalAfterDec.gte(originalAmountDec);
+    const newStatus = fullyRefundedAfter ? 'refunded' : 'partially_refunded';
     const prevStatus = original.status;
 
     // Phase 1: atomically claim the original by transitioning its status.
-    // The status guard on the prior status ensures only one concurrent
-    // refund succeeds — a second refund will hit `partially_refunded`
-    // (or `refunded`) and fall through.
+    // Accept prevStatus of captured/settled/partially_refunded. A second
+    // refund still races safely because the guard requires the exact
+    // prevStatus we read — if another refund just landed, our claim fails.
     const [claimed] = await this.db
       .update(payments)
       .set({ status: newStatus, updatedAt: new Date() })
@@ -332,13 +359,16 @@ export class PaymentService {
       );
     }
 
-    // Phase 2: call Stripe with idempotency key derived from the refund amount
-    // so that different partial refunds get different keys, but a retry of the
-    // same logical refund is deduped by Stripe.
+    // Phase 2: call Stripe with a UNIQUE idempotency key per refund attempt.
+    // Bug 3: the previous `ref_${id}` key caused Stripe to dedupe the second
+    // partial refund against the first. Include the running total so each
+    // partial refund gets a distinct key while a retry of the same logical
+    // refund (same running total) is still deduped.
+    const idempotencyKey = `ref_${id}_${totalAfterDec.toFixed(2)}`;
     const result = await this.gateway.refund(
       original.gatewayTransactionId,
       refundAmountDec.toNumber(),
-      { idempotencyKey: `ref_${id}_${refundAmountDec.toFixed(2)}` },
+      { idempotencyKey },
     );
 
     if (!result.success) {

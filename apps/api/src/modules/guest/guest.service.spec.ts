@@ -153,11 +153,43 @@ describe('GuestService', () => {
     });
   });
 
-  describe('delete', () => {
-    it('should delete the guest when linked to property', async () => {
+  describe('delete (GDPR anonymization — Bug 4)', () => {
+    it('should anonymize the guest (not hard-delete) when linked to property', async () => {
+      // Bug 4: delete now anonymizes via UPDATE + audit-log INSERT. The
+      // physical row stays (FK constraints from bookings/reservations).
       const result = await service.delete(mockGuest.id, PROPERTY_ID);
       expect(result).toEqual({ deleted: true });
-      expect(mockDb.delete).toHaveBeenCalled();
+      // Anonymization is an UPDATE, not a DELETE
+      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(mockDb.update).toHaveBeenCalled();
+      // Audit log is inserted
+      expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it('should scrub PII fields on anonymization', async () => {
+      await service.delete(mockGuest.id, PROPERTY_ID);
+      const setCall = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
+      expect(setCall.firstName).toBe('Deleted');
+      expect(setCall.lastName).toBe('User');
+      expect(setCall.phone).toBeNull();
+      expect(setCall.dateOfBirth).toBeNull();
+      expect(setCall.idNumber).toBeNull();
+      expect(setCall.addressLine1).toBeNull();
+      expect(setCall.isDeleted).toBe(true);
+      expect(setCall.deletedAt).toBeInstanceOf(Date);
+      // Email is replaced with a non-identifying sentinel
+      expect(setCall.email).toMatch(/^anon\+.+@deleted\.local$/);
+    });
+
+    it('should write an audit log with reason=gdpr_erasure and WITHOUT previous PII', async () => {
+      await service.delete(mockGuest.id, PROPERTY_ID);
+      const auditValues = mockDb.insert.mock.results[0].value.values.mock.calls[0][0];
+      expect(auditValues.action).toBe('delete');
+      expect(auditValues.entityType).toBe('guest');
+      expect(auditValues.description).toBe('gdpr_erasure');
+      // Must NOT leak PII back into the audit log
+      expect(auditValues.previousValue).toBeUndefined();
+      expect(JSON.stringify(auditValues)).not.toContain('john@example.com');
     });
 
     it('should throw NotFoundException when not linked to property', async () => {
@@ -166,6 +198,12 @@ describe('GuestService', () => {
       await expect(svc.delete(mockGuest.id, PROPERTY_ID)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('preserves booking history by not calling db.delete', async () => {
+      // Contract test: FK-safe erasure MUST never issue DELETE on guests.
+      await service.delete(mockGuest.id, PROPERTY_ID);
+      expect(mockDb.delete).not.toHaveBeenCalled();
     });
   });
 

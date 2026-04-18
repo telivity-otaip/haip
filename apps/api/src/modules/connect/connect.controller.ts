@@ -8,9 +8,11 @@ import {
   Param,
   Query,
   ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiResponse, ApiSecurity } from '@nestjs/swagger';
 import { Public } from '../auth/public.decorator';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 import { ConnectSearchService } from './connect-search.service';
 import { ConnectContentService } from './connect-content.service';
 import { ConnectBookingService } from './connect-booking.service';
@@ -20,10 +22,16 @@ import { AgentSearchDto } from './dto/agent-search.dto';
 import { AgentBookDto } from './dto/agent-book.dto';
 import { AgentModifyDto, AgentCancelDto } from './dto/agent-modify.dto';
 import { CreateSubscriptionDto } from './dto/agent-event-subscription.dto';
+import { ListPropertiesDto } from './dto/list-properties.dto';
 
 @ApiTags('Connect — OTAIP Agent API')
+@ApiSecurity('api-key')
 @Controller('api/v1/connect')
+// @Public() skips the global JWT guard — the Connect API uses an API key
+// (x-api-key header) validated by ApiKeyGuard instead. Without this, every
+// endpoint below would be reachable unauthenticated.
 @Public()
+@UseGuards(ApiKeyGuard)
 export class ConnectController {
   constructor(
     private readonly searchService: ConnectSearchService,
@@ -44,8 +52,8 @@ export class ConnectController {
 
   @Get('properties')
   @ApiOperation({ summary: 'List all properties (Agent 4.2 background sync)' })
-  async listProperties() {
-    return this.contentService.listProperties();
+  async listProperties(@Query() dto: ListPropertiesDto) {
+    return this.contentService.listProperties(dto.limit, dto.offset);
   }
 
   @Get('properties/:id')

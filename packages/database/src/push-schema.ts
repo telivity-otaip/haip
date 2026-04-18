@@ -149,6 +149,8 @@ async function main() {
       gdpr_consent_date timestamptz,
       gdpr_data_retention_override timestamptz,
       notes text,
+      is_deleted boolean NOT NULL DEFAULT false,
+      deleted_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,

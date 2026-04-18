@@ -7,9 +7,10 @@ import { ConnectEventsService } from './connect-events.service';
 import { ConnectInsightsService } from './connect-insights.service';
 import { ReservationModule } from '../reservation/reservation.module';
 import { WebhookModule } from '../webhook/webhook.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [ReservationModule, WebhookModule],
+  imports: [ReservationModule, WebhookModule, AuthModule],
   controllers: [ConnectController],
   providers: [
     ConnectSearchService,
