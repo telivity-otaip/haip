@@ -120,6 +120,9 @@ importers:
       '@swc/core':
         specifier: ^1.9.0
         version: 1.15.24
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
       '@types/passport-jwt':
         specifier: ^4.0.1
         version: 4.0.1

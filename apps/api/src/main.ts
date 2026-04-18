@@ -1,14 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-// express is the underlying HTTP adapter used by NestJS's platform-express.
-// We don't declare @types/express directly; import the runtime bindings and
-// type them loosely here — these middlewares are only referenced from main.ts.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { json, raw } = require('express') as {
-  json: (...args: any[]) => any;
-  raw: (...args: any[]) => any;
-};
+import { json, raw } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
