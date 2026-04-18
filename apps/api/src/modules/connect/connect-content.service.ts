@@ -72,12 +72,17 @@ export class ConnectContentService {
 
   /**
    * List all properties (for Agent 4.2 background sync).
+   * Bug 7: paginate at SQL — default page size 50, hard cap 100.
    */
-  async listProperties() {
+  async listProperties(limit = 50, offset = 0) {
+    const effectiveLimit = Math.min(Math.max(limit, 1), 100);
+    const effectiveOffset = Math.max(offset, 0);
     const allProperties = await this.db
       .select()
       .from(properties)
-      .where(eq(properties.isActive, true));
+      .where(eq(properties.isActive, true))
+      .limit(effectiveLimit)
+      .offset(effectiveOffset);
 
     return allProperties.map((p: any) => ({
       sourcePropertyId: p.id,

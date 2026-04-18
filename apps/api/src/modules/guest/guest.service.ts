@@ -1,6 +1,6 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, ilike, or, and, sql, inArray } from 'drizzle-orm';
-import { guests, reservations } from '@haip/database';
+import { guests, reservations, auditLogs } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
@@ -64,11 +64,25 @@ export class GuestService {
     if (!guest) {
       throw new NotFoundException(`Guest ${id} not found`);
     }
+    // Bug 4: after GDPR erasure, treat the guest as not found. Booking history
+    // remains but the profile is tombstoned — returning anonymized PII here
+    // would leak the fact that the user once existed (and the decision we made).
+    if (guest.isDeleted) {
+      throw new NotFoundException(`Guest ${id} not found`);
+    }
     return guest;
   }
 
   async update(id: string, propertyId: string, dto: UpdateGuestDto) {
     await this.assertGuestAtProperty(id, propertyId);
+    // Bug 4: once erased, treat the row as gone.
+    const [existing] = await this.db
+      .select({ isDeleted: guests.isDeleted })
+      .from(guests)
+      .where(eq(guests.id, id));
+    if (existing?.isDeleted) {
+      throw new NotFoundException(`Guest ${id} not found`);
+    }
     const values: Record<string, unknown> = { ...dto, updatedAt: new Date() };
     if (dto.isDnr === true && !dto.dnrReason) {
       // Keep existing reason if not provided
@@ -96,21 +110,69 @@ export class GuestService {
   }
 
   async delete(id: string, propertyId: string) {
+    // Bug 4: GDPR right-to-erasure. Hard DELETE fails on FK constraints from
+    // bookings.guest_id / reservations.guest_id (operational/legal retention
+    // requires we keep stay history). Instead, anonymize PII in place and
+    // flip isDeleted. findById/update below treat isDeleted=true as 404.
     await this.assertGuestAtProperty(id, propertyId);
-    const [guest] = await this.db
-      .delete(guests)
+
+    const now = new Date();
+    const [anonymized] = await this.db
+      .update(guests)
+      .set({
+        email: `anon+${id}@deleted.local`,
+        firstName: 'Deleted',
+        lastName: 'User',
+        phone: null,
+        dateOfBirth: null,
+        idType: null,
+        idNumber: null,
+        idCountry: null,
+        idExpiry: null,
+        nationality: null,
+        addressLine1: null,
+        addressLine2: null,
+        city: null,
+        stateProvince: null,
+        postalCode: null,
+        countryCode: null,
+        companyName: null,
+        loyaltyNumber: null,
+        notes: null,
+        preferences: {},
+        dnrReason: null,
+        gdprConsentMarketing: false,
+        gdprConsentDate: null,
+        isDeleted: true,
+        deletedAt: now,
+        updatedAt: now,
+      })
       .where(eq(guests.id, id))
       .returning();
-    if (!guest) {
+
+    if (!anonymized) {
       throw new NotFoundException(`Guest ${id} not found`);
     }
+
+    // Write an audit log WITHOUT the previous PII — including it would defeat
+    // the erasure. Record just that the erasure happened, who, and why.
+    await this.db.insert(auditLogs).values({
+      propertyId,
+      action: 'delete',
+      entityType: 'guest',
+      entityId: id,
+      description: 'gdpr_erasure',
+    });
+
     return { deleted: true };
   }
 
   async search(propertyId: string, dto: SearchGuestsDto) {
     // Scope to guests with ≥1 reservation at this property.
     // Subquery: distinct guest_id from reservations where property_id = $1.
+    // Bug 4: also exclude GDPR-erased guests from search results.
     const conditions: any[] = [
+      eq(guests.isDeleted, false),
       inArray(
         guests.id,
         this.db

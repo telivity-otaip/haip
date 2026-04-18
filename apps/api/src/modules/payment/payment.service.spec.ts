@@ -384,5 +384,146 @@ describe('PaymentService', () => {
       );
       expect(result).toEqual(refundPayment);
     });
+
+    // Bug 3: partial refunds were one-shot only because:
+    //  1. Entry was restricted to captured/settled (partially_refunded couldn't refund)
+    //  2. Stripe idempotency key was `ref_${id}` — same for every partial
+    //  3. There was no remaining-amount check against prior refunds
+    describe('multi-refund partial scenario (Bug 3)', () => {
+      function buildRefundDb(
+        original: any,
+        priorRefunds: any[],
+        claimResult: any[],
+        insertedRefund: any,
+      ) {
+        let selectCall = 0;
+        return {
+          select: vi.fn().mockImplementation(() => ({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue({
+                then: (resolve: any) => {
+                  selectCall++;
+                  // Order: 1=original lookup, 2=prior refunds sum
+                  if (selectCall === 1) resolve([original]);
+                  else resolve(priorRefunds);
+                },
+              }),
+            }),
+          })),
+          insert: vi.fn().mockReturnValue({
+            values: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([insertedRefund]),
+            }),
+          }),
+          update: vi.fn().mockReturnValue({
+            set: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue(claimResult),
+              }),
+            }),
+          }),
+          delete: vi.fn(),
+        };
+      }
+
+      async function svcWith(db: any) {
+        const module: TestingModule = await Test.createTestingModule({
+          providers: [
+            PaymentService,
+            { provide: DRIZZLE, useValue: db },
+            { provide: FolioService, useValue: mockFolioService },
+            { provide: PAYMENT_GATEWAY, useValue: mockGateway },
+            { provide: WebhookService, useValue: mockWebhookService },
+          ],
+        }).compile();
+        return module.get<PaymentService>(PaymentService);
+      }
+
+      const capturedOriginal = { ...mockPayment, amount: '100.00', status: 'captured' };
+      const partialOriginal = { ...mockPayment, amount: '100.00', status: 'partially_refunded' };
+
+      it('first partial refund: $50 of $100 transitions to partially_refunded', async () => {
+        const db = buildRefundDb(
+          capturedOriginal,
+          [], // no prior refunds
+          [{ ...capturedOriginal, status: 'partially_refunded' }],
+          { id: 'refund-1', amount: '-50.00', originalPaymentId: 'pay-001' },
+        );
+        const svc = await svcWith(db);
+        await svc.refundPayment('pay-001', 'prop-001', '50.00');
+        // UPDATE targeted partially_refunded
+        const setCall = db.update.mock.results[0].value.set.mock.calls[0][0];
+        expect(setCall.status).toBe('partially_refunded');
+      });
+
+      it('second partial refund: $30 on top of an existing $50 partial works', async () => {
+        const db = buildRefundDb(
+          partialOriginal, // already partially_refunded
+          [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
+          [{ ...partialOriginal, status: 'partially_refunded' }],
+          { id: 'refund-2', amount: '-30.00', originalPaymentId: 'pay-001' },
+        );
+        const svc = await svcWith(db);
+        await svc.refundPayment('pay-001', 'prop-001', '30.00');
+        expect(mockGateway.refund).toHaveBeenCalled();
+      });
+
+      it('final refund that closes the gap transitions to fully refunded', async () => {
+        // $100 - $50 - $30 = $20 remaining, refund $20 → status=refunded
+        const db = buildRefundDb(
+          partialOriginal,
+          [
+            { amount: '-50.00', originalPaymentId: 'pay-001' },
+            { amount: '-30.00', originalPaymentId: 'pay-001' },
+          ],
+          [{ ...partialOriginal, status: 'refunded' }],
+          { id: 'refund-3', amount: '-20.00', originalPaymentId: 'pay-001' },
+        );
+        const svc = await svcWith(db);
+        await svc.refundPayment('pay-001', 'prop-001', '20.00');
+        const setCall = db.update.mock.results[0].value.set.mock.calls[0][0];
+        expect(setCall.status).toBe('refunded');
+      });
+
+      it('rejects a refund that would exceed remaining refundable amount', async () => {
+        // $100 - $50 already = $50 remaining. Attempt $60 → BadRequest.
+        const db = buildRefundDb(
+          partialOriginal,
+          [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
+          [], // unreachable
+          { id: 'unreachable' } as any,
+        );
+        const svc = await svcWith(db);
+        await expect(
+          svc.refundPayment('pay-001', 'prop-001', '60.00'),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('uses a unique idempotency key per partial so Stripe does not dedupe different refunds', async () => {
+        // First partial
+        const db1 = buildRefundDb(
+          capturedOriginal,
+          [],
+          [{ ...capturedOriginal, status: 'partially_refunded' }],
+          { id: 'refund-1', amount: '-50.00', originalPaymentId: 'pay-001' },
+        );
+        const svc1 = await svcWith(db1);
+        await svc1.refundPayment('pay-001', 'prop-001', '50.00');
+        const key1 = mockGateway.refund.mock.calls[mockGateway.refund.mock.calls.length - 1][2].idempotencyKey;
+
+        // Second partial on top — should use a different key
+        const db2 = buildRefundDb(
+          partialOriginal,
+          [{ amount: '-50.00', originalPaymentId: 'pay-001' }],
+          [{ ...partialOriginal, status: 'partially_refunded' }],
+          { id: 'refund-2', amount: '-30.00', originalPaymentId: 'pay-001' },
+        );
+        const svc2 = await svcWith(db2);
+        await svc2.refundPayment('pay-001', 'prop-001', '30.00');
+        const key2 = mockGateway.refund.mock.calls[mockGateway.refund.mock.calls.length - 1][2].idempotencyKey;
+
+        expect(key1).not.toBe(key2);
+      });
+    });
   });
 });

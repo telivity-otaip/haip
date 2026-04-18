@@ -4,6 +4,8 @@ import {
   Post,
   Patch,
   Delete,
+  HttpCode,
+  HttpStatus,
   Param,
   Body,
   Query,
@@ -73,13 +75,14 @@ export class GuestController {
 
   @Delete(':id')
   @Roles('admin', 'front_desk')
-  @ApiOperation({ summary: 'Delete guest profile (GDPR right to erasure, scoped to property)' })
-  @ApiResponse({ status: 200, description: 'Guest deleted' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Erase guest profile (GDPR right to erasure, scoped to property). Anonymizes PII and preserves booking history.' })
+  @ApiResponse({ status: 204, description: 'Guest erased (anonymized)' })
   @ApiResponse({ status: 404, description: 'Guest not found at this property' })
-  deleteGuest(
+  async deleteGuest(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('propertyId', ParseUUIDPipe) propertyId: string,
-  ) {
-    return this.guestService.delete(id, propertyId);
+  ): Promise<void> {
+    await this.guestService.delete(id, propertyId);
   }
 }

@@ -6,7 +6,7 @@ import {
   ConflictException,
   forwardRef,
 } from '@nestjs/common';
-import { eq, and, sql, gte, lte } from 'drizzle-orm';
+import { eq, and, sql, gte, lte, inArray } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import { reservations, bookings, guests, rooms, roomTypes, ratePlans, properties, payments } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
@@ -139,15 +139,19 @@ export class ReservationService {
 
   async confirm(id: string, propertyId: string) {
     const reservation = await this.findByIdRaw(id, propertyId);
+    // UX: short-circuit with a clear error for callers passing stale state.
     assertTransition(reservation.status as ReservationStatus, 'confirmed');
 
-    const [updated] = await this.db
-      .update(reservations)
-      .set({ status: 'confirmed', updatedAt: new Date() })
-      .where(
-        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
-      )
-      .returning();
+    // Bug 2: actual state change is an atomic conditional update. Two
+    // concurrent confirms can both pass assertTransition but only one
+    // can flip status=pending → status=confirmed.
+    const updated = await this.claimTransition(
+      id,
+      propertyId,
+      ['pending'],
+      { status: 'confirmed', updatedAt: new Date() },
+      'confirmed',
+    );
     return updated;
   }
 
@@ -176,13 +180,15 @@ export class ReservationService {
       );
     }
 
-    const [updated] = await this.db
-      .update(reservations)
-      .set({ roomId: dto.roomId, status: 'assigned', updatedAt: new Date() })
-      .where(
-        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
-      )
-      .returning();
+    // Bug 2: atomic claim — only one assign can win the race on the same
+    // reservation, and only from states the state machine allows.
+    const updated = await this.claimTransition(
+      id,
+      propertyId,
+      ['confirmed'],
+      { roomId: dto.roomId, status: 'assigned', updatedAt: new Date() },
+      'assigned',
+    );
     return updated;
   }
 
@@ -190,18 +196,20 @@ export class ReservationService {
     const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'cancelled');
 
-    const [updated] = await this.db
-      .update(reservations)
-      .set({
+    // Bug 2: conditional claim prevents double-cancel races. Allowed from
+    // any pre-check-in state per the state machine.
+    const updated = await this.claimTransition(
+      id,
+      propertyId,
+      ['pending', 'confirmed', 'assigned'],
+      {
         status: 'cancelled',
         cancelledAt: new Date(),
         cancellationReason: dto.cancellationReason,
         updatedAt: new Date(),
-      })
-      .where(
-        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
-      )
-      .returning();
+      },
+      'cancelled',
+    );
 
     // Emit reservation.cancelled so channel manager / ARI can push updated availability.
     await this.webhookService.emit(
@@ -225,13 +233,14 @@ export class ReservationService {
     const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'no_show');
 
-    const [updated] = await this.db
-      .update(reservations)
-      .set({ status: 'no_show', updatedAt: new Date() })
-      .where(
-        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
-      )
-      .returning();
+    // Bug 2: atomic claim — only valid from confirmed/assigned per the SM.
+    const updated = await this.claimTransition(
+      id,
+      propertyId,
+      ['confirmed', 'assigned'],
+      { status: 'no_show', updatedAt: new Date() },
+      'no_show',
+    );
     return updated;
   }
 
@@ -337,13 +346,16 @@ export class ReservationService {
         : dto.specialRequests;
     }
 
-    const [updated] = await this.db
-      .update(reservations)
-      .set(updateData)
-      .where(
-        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
-      )
-      .returning();
+    // Bug 2: atomic claim — only assigned reservations may check in, and
+    // only one concurrent check-in can win. Side effects (folio, payment,
+    // room transition, webhook) run ONLY if the claim succeeded.
+    const updated = await this.claimTransition(
+      id,
+      propertyId,
+      ['assigned'],
+      updateData,
+      'checked_in',
+    );
 
     // Auto-create guest folio on check-in
     const folio = await this.folioService.createAutoFolio(updated);
@@ -551,13 +563,15 @@ export class ReservationService {
     };
     if (lateCheckoutFeeAmount) updateData['lateCheckoutFee'] = lateCheckoutFeeAmount;
 
-    const [updated] = await this.db
-      .update(reservations)
-      .set(updateData)
-      .where(
-        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
-      )
-      .returning();
+    // Bug 2: atomic claim — only checked_in / stayover / due_out can
+    // transition to checked_out. Prevents double checkout races.
+    const updated = await this.claimTransition(
+      id,
+      propertyId,
+      ['checked_in', 'stayover', 'due_out'],
+      updateData,
+      'checked_out',
+    );
 
     // Emit webhook
     await this.webhookService.emit(
@@ -840,6 +854,58 @@ export class ReservationService {
       page,
       limit,
     };
+  }
+
+  /**
+   * Atomic state-machine transition (Bug 2, PR-A pattern).
+   *
+   * Emits a conditional UPDATE that only matches rows currently in one of
+   * `allowedFromStatuses`. If the update matches zero rows, we look up the
+   * current state and raise ConflictException (or NotFoundException if the
+   * row disappeared). This removes the read-then-write race where two
+   * concurrent transitions could both pass a prior assertTransition() call.
+   */
+  private async claimTransition(
+    id: string,
+    propertyId: string,
+    allowedFromStatuses: ReservationStatus[],
+    updateData: Record<string, unknown>,
+    targetStatus: ReservationStatus,
+  ) {
+    const statusCondition = allowedFromStatuses.length === 1
+      ? eq(reservations.status, allowedFromStatuses[0]! as any)
+      : inArray(reservations.status, allowedFromStatuses as any);
+
+    const claimed = await this.db
+      .update(reservations)
+      .set(updateData)
+      .where(
+        and(
+          eq(reservations.id, id),
+          eq(reservations.propertyId, propertyId),
+          statusCondition,
+        ),
+      )
+      .returning();
+
+    if (claimed && claimed.length > 0) {
+      return claimed[0];
+    }
+
+    // Claim failed — either gone, wrong tenant, or wrong state. Distinguish.
+    const [current] = await this.db
+      .select()
+      .from(reservations)
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      );
+    if (!current) {
+      throw new NotFoundException(`Reservation ${id} not found`);
+    }
+    throw new ConflictException(
+      `Cannot transition reservation from '${current.status}' to '${targetStatus}' ` +
+      `(concurrent modification? expected one of: ${allowedFromStatuses.join(', ')})`,
+    );
   }
 
   private async findByIdRaw(id: string, propertyId: string) {

@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, sql, desc, asc, inArray, gte, lt } from 'drizzle-orm';
@@ -196,21 +197,21 @@ export class HousekeepingService {
       );
     }
 
-    const [updated] = await this.db
-      .update(housekeepingTasks)
-      .set({
+    // Bug 5: atomic conditional claim. Two concurrent assigns both pass the
+    // read-then-check above, but only one UPDATE with status='pending'
+    // matches. The loser raises ConflictException with precise detail.
+    const updated = await this.claimTaskTransition(
+      taskId,
+      propertyId,
+      ['pending'],
+      {
         assignedTo: dto.assignedTo,
         assignedAt: new Date(),
         status: 'assigned',
         updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(housekeepingTasks.id, taskId),
-          eq(housekeepingTasks.propertyId, propertyId),
-        ),
-      )
-      .returning();
+      },
+      'assigned',
+    );
 
     await this.webhookService.emit(
       'housekeeping.task_assigned',
@@ -232,20 +233,18 @@ export class HousekeepingService {
       );
     }
 
-    const [updated] = await this.db
-      .update(housekeepingTasks)
-      .set({
+    // Bug 5: atomic claim
+    const updated = await this.claimTaskTransition(
+      taskId,
+      propertyId,
+      ['assigned'],
+      {
         status: 'in_progress',
         startedAt: new Date(),
         updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(housekeepingTasks.id, taskId),
-          eq(housekeepingTasks.propertyId, propertyId),
-        ),
-      )
-      .returning();
+      },
+      'in_progress',
+    );
 
     return updated;
   }
@@ -259,21 +258,19 @@ export class HousekeepingService {
       );
     }
 
-    const [updated] = await this.db
-      .update(housekeepingTasks)
-      .set({
+    // Bug 5: atomic claim
+    const updated = await this.claimTaskTransition(
+      taskId,
+      propertyId,
+      ['assigned'],
+      {
         assignedTo: null,
         assignedAt: null,
         status: 'pending',
         updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(housekeepingTasks.id, taskId),
-          eq(housekeepingTasks.propertyId, propertyId),
-        ),
-      )
-      .returning();
+      },
+      'pending',
+    );
 
     return updated;
   }
@@ -302,11 +299,25 @@ export class HousekeepingService {
         asc(rooms.building),
       );
 
+    // Bug 5: each assign() now uses a conditional-update-by-status claim.
+    // If another request claimed a task in between the SELECT above and the
+    // UPDATE here (e.g. concurrent autoAssign or manual assign), the claim
+    // fails and we simply skip that task rather than 500. Order: claim first,
+    // webhook after — handled inside assign().
     let assigned = 0;
     for (let i = 0; i < tasks.length; i++) {
       const housekeeper = dto.housekeepers[i % dto.housekeepers.length]!;
-      await this.assign(tasks[i]!.taskId, dto.propertyId, { assignedTo: housekeeper });
-      assigned++;
+      try {
+        await this.assign(tasks[i]!.taskId, dto.propertyId, { assignedTo: housekeeper });
+        assigned++;
+      } catch (err: any) {
+        // Task was already claimed by a concurrent caller, or transitioned
+        // out of 'pending' between the select and the update — skip.
+        if (err instanceof ConflictException || err instanceof BadRequestException) {
+          continue;
+        }
+        throw err;
+      }
     }
 
     return { assigned, total: tasks.length };
@@ -331,38 +342,41 @@ export class HousekeepingService {
     if (dto.maintenanceRequired !== undefined) updates['maintenanceRequired'] = dto.maintenanceRequired;
     if (dto.maintenanceNotes !== undefined) updates['maintenanceNotes'] = dto.maintenanceNotes;
 
-    // Transition room: vacant_dirty → clean (skip if already clean, e.g. after failed inspection)
-    const roomStatus = await this.roomStatusService.getRoomStatus(task.roomId, propertyId);
-    if (roomStatus.status === 'vacant_dirty') {
-      await this.roomStatusService.transitionStatus(task.roomId, propertyId, 'clean');
-    }
-
-    // Check if property requires inspection
+    // Check if property requires inspection (needed before claim so we know
+    // which terminal status to set atomically)
     const [property] = await this.db
       .select({ settings: properties.settings })
       .from(properties)
       .where(eq(properties.id, propertyId));
 
     const requireInspection = (property?.settings as any)?.requireInspection ?? true;
-
     if (!requireInspection) {
-      // Skip inspection — go straight to inspected + guest_ready
+      // Skip inspection — go straight to inspected
       updates['status'] = 'inspected';
       updates['inspectedAt'] = new Date();
+    }
+
+    // Bug 5: atomic claim FIRST — only a task still in_progress may
+    // complete, and only one concurrent completion wins. Side effects
+    // (room transitions, maintenance task, webhook) run after the claim.
+    const updated = await this.claimTaskTransition(
+      taskId,
+      propertyId,
+      ['in_progress'],
+      updates,
+      (updates['status'] as string),
+    );
+
+    // Transition room: vacant_dirty → clean (skip if already clean, e.g. after failed inspection)
+    const roomStatus = await this.roomStatusService.getRoomStatus(task.roomId, propertyId);
+    if (roomStatus.status === 'vacant_dirty') {
+      await this.roomStatusService.transitionStatus(task.roomId, propertyId, 'clean');
+    }
+
+    if (!requireInspection) {
       await this.roomStatusService.transitionStatus(task.roomId, propertyId, 'inspected');
       await this.roomStatusService.transitionStatus(task.roomId, propertyId, 'guest_ready');
     }
-
-    const [updated] = await this.db
-      .update(housekeepingTasks)
-      .set(updates)
-      .where(
-        and(
-          eq(housekeepingTasks.id, taskId),
-          eq(housekeepingTasks.propertyId, propertyId),
-        ),
-      )
-      .returning();
 
     await this.webhookService.emit(
       'housekeeping.task_completed',
@@ -406,16 +420,14 @@ export class HousekeepingService {
       if (dto.checklist) updates['checklist'] = dto.checklist;
       if (dto.notes !== undefined) updates['notes'] = dto.notes;
 
-      const [updated] = await this.db
-        .update(housekeepingTasks)
-        .set(updates)
-        .where(
-          and(
-            eq(housekeepingTasks.id, taskId),
-            eq(housekeepingTasks.propertyId, propertyId),
-          ),
-        )
-        .returning();
+      // Bug 5: atomic claim from 'completed'
+      const updated = await this.claimTaskTransition(
+        taskId,
+        propertyId,
+        ['completed'],
+        updates,
+        'inspected',
+      );
 
       // Transition room: clean → inspected → guest_ready
       await this.roomStatusService.transitionStatus(task.roomId, propertyId, 'inspected');
@@ -437,16 +449,14 @@ export class HousekeepingService {
       updates['notes'] = `Inspector notes: ${dto.notes}${task.notes ? `\n${task.notes}` : ''}`;
     }
 
-    const [updated] = await this.db
-      .update(housekeepingTasks)
-      .set(updates)
-      .where(
-        and(
-          eq(housekeepingTasks.id, taskId),
-          eq(housekeepingTasks.propertyId, propertyId),
-        ),
-      )
-      .returning();
+    // Bug 5: atomic claim from 'completed'
+    const updated = await this.claimTaskTransition(
+      taskId,
+      propertyId,
+      ['completed'],
+      updates,
+      'pending',
+    );
 
     // Room stays at 'clean' — no transition (clean → vacant_dirty not valid)
     return updated;
@@ -461,22 +471,69 @@ export class HousekeepingService {
       );
     }
 
-    const [updated] = await this.db
-      .update(housekeepingTasks)
-      .set({
+    // Bug 5: atomic claim — only pending/assigned can skip
+    const updated = await this.claimTaskTransition(
+      taskId,
+      propertyId,
+      ['pending', 'assigned'],
+      {
         status: 'skipped',
         notes: reason ? `Skipped: ${reason}` : task.notes,
         updatedAt: new Date(),
-      })
+      },
+      'skipped',
+    );
+
+    return updated;
+  }
+
+  /**
+   * Atomic state-machine transition for housekeeping tasks (Bug 5,
+   * PR-A pattern). See ReservationService.claimTransition for rationale.
+   */
+  private async claimTaskTransition(
+    taskId: string,
+    propertyId: string,
+    allowedFromStatuses: string[],
+    updateData: Record<string, unknown>,
+    targetStatus: string,
+  ) {
+    const statusCondition = allowedFromStatuses.length === 1
+      ? eq(housekeepingTasks.status, allowedFromStatuses[0]! as any)
+      : inArray(housekeepingTasks.status, allowedFromStatuses as any);
+
+    const claimed = await this.db
+      .update(housekeepingTasks)
+      .set(updateData)
+      .where(
+        and(
+          eq(housekeepingTasks.id, taskId),
+          eq(housekeepingTasks.propertyId, propertyId),
+          statusCondition,
+        ),
+      )
+      .returning();
+
+    if (claimed && claimed.length > 0) {
+      return claimed[0];
+    }
+
+    const [current] = await this.db
+      .select()
+      .from(housekeepingTasks)
       .where(
         and(
           eq(housekeepingTasks.id, taskId),
           eq(housekeepingTasks.propertyId, propertyId),
         ),
-      )
-      .returning();
-
-    return updated;
+      );
+    if (!current) {
+      throw new NotFoundException(`Housekeeping task ${taskId} not found`);
+    }
+    throw new ConflictException(
+      `Cannot transition task from '${current.status}' to '${targetStatus}' ` +
+      `(concurrent modification? expected one of: ${allowedFromStatuses.join(', ')})`,
+    );
   }
 
   private async generateChecklist(taskType: string, roomId: string) {
@@ -755,9 +812,13 @@ export class HousekeepingService {
   async handleRoomStatusChanged(payload: WebhookPayload) {
     if (payload.data['newStatus'] !== 'vacant_dirty') return;
 
-    const today = new Date().toISOString().split('T')[0]!;
     const propertyId = payload.propertyId!;
     const roomId = payload.entityId;
+
+    // Bug 6: resolve the service date in the property's local timezone, not
+    // server UTC. A 23:30 local checkout in America/Los_Angeles was landing
+    // on tomorrow's UTC date and creating the task under the wrong day.
+    const today = await this.getPropertyBusinessDate(propertyId);
 
     // Check for existing checkout task for this room + date to avoid duplicates
     const [existing] = await this.db
@@ -782,6 +843,32 @@ export class HousekeepingService {
       priority: 0,
       serviceDate: today,
     });
+  }
+
+  /**
+   * Bug 6: compute today's business date (YYYY-MM-DD) in the property's
+   * configured timezone rather than server UTC. Intl.DateTimeFormat + en-CA
+   * gives ISO-ordered parts which we concatenate directly.
+   */
+  private async getPropertyBusinessDate(propertyId: string): Promise<string> {
+    const [property] = await this.db
+      .select({ timezone: properties.timezone })
+      .from(properties)
+      .where(eq(properties.id, propertyId));
+
+    const tz = (property?.timezone as string | undefined) ?? 'UTC';
+    try {
+      // en-CA formats as YYYY-MM-DD natively
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+    } catch {
+      // Bad timezone on the property row — fall back to UTC rather than throw.
+      return new Date().toISOString().split('T')[0]!;
+    }
   }
 
   private async findByIdRaw(id: string, propertyId: string) {

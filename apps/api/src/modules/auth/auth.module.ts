@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './auth.guard';
 import { RolesGuard } from './roles.guard';
+import { ApiKeyGuard } from './api-key.guard';
 import { WsAuthService } from './ws-auth.service';
 
 /**
@@ -51,7 +52,8 @@ import { WsAuthService } from './ws-auth.service';
     // passport HTTP guards (e.g. EventsGateway). Registered always; the
     // gateway itself honours AUTH_ENABLED=false as a dev bypass.
     WsAuthService,
+    ApiKeyGuard,
   ],
-  exports: [WsAuthService],
+  exports: [WsAuthService, ApiKeyGuard],
 })
 export class AuthModule {}

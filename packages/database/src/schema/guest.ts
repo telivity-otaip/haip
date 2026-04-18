@@ -56,6 +56,11 @@ export const guests = pgTable('guests', {
   // Notes
   notes: text('notes'),
 
+  // GDPR right-to-erasure (Bug 4): hard DELETE violates FK constraints from
+  // bookings and reservations. Erasure anonymizes PII and flips `isDeleted`.
+  isDeleted: boolean('is_deleted').notNull().default(false),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -22,15 +22,14 @@ export class ConnectSearchService {
     const startTime = Date.now();
     const searchId = randomUUID();
 
-    // Find matching properties
-    const matchedProperties = await this.findProperties(dto);
-
-    const limit = dto.limit ?? 20;
+    // Bug 7: paginate at SQL level (LIMIT/OFFSET) rather than fetching every
+    // matching property and slicing in memory. DTO enforces Max(100) on limit.
+    const limit = Math.min(dto.limit ?? 20, 100);
     const offset = dto.offset ?? 0;
-    const paged = matchedProperties.slice(offset, offset + limit);
+    const matchedProperties = await this.findProperties(dto, limit, offset);
 
     const results = [];
-    for (const property of paged) {
+    for (const property of matchedProperties) {
       const result = await this.buildPropertyResult(property, dto);
       if (result.roomTypes.length > 0) {
         results.push(result);
@@ -133,7 +132,7 @@ export class ConnectSearchService {
 
   // --- Private ---
 
-  private async findProperties(dto: AgentSearchDto) {
+  private async findProperties(dto: AgentSearchDto, limit?: number, offset?: number) {
     if (dto.propertyId) {
       const [property] = await this.db
         .select()
@@ -150,10 +149,17 @@ export class ConnectSearchService {
       conditions.push(sql`LOWER(${properties.city}) = LOWER(${dto.city})`);
     }
 
+    // Bug 7: LIMIT/OFFSET pushed to SQL so a large tenant doesn't load the
+    // entire property catalog into memory per search call.
+    const effectiveLimit = Math.min(limit ?? 20, 100);
+    const effectiveOffset = offset ?? 0;
+
     return this.db
       .select()
       .from(properties)
-      .where(and(...conditions));
+      .where(and(...conditions))
+      .limit(effectiveLimit)
+      .offset(effectiveOffset);
   }
 
   private async buildPropertyResult(property: any, dto: AgentSearchDto) {
