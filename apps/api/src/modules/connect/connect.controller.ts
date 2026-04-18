@@ -122,6 +122,22 @@ export class ConnectController {
     return this.eventsService.testSubscription(id, propertyId);
   }
 
+  @Get('subscriptions/:id/deliveries')
+  @ApiOperation({ summary: 'List webhook delivery attempts for a subscription' })
+  @ApiQuery({ name: 'propertyId', required: true })
+  @ApiQuery({ name: 'limit', required: false })
+  async listDeliveries(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.eventsService.listDeliveries(
+      id,
+      propertyId,
+      limit ? parseInt(limit, 10) : undefined,
+    );
+  }
+
   // --- Event Polling ---
 
   @Get('events')

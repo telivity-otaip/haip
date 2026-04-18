@@ -31,6 +31,13 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'audit_run_status') THEN CREATE TYPE audit_run_status AS ENUM ('running','completed','failed','rolled_back'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'channel_status') THEN CREATE TYPE channel_status AS ENUM ('active','inactive','error','pending_setup'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'sync_direction') THEN CREATE TYPE sync_direction AS ENUM ('push','pull','bidirectional'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tax_rule_type') THEN CREATE TYPE tax_rule_type AS ENUM ('percentage','flat_per_night','flat_per_stay'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_source') THEN CREATE TYPE review_source AS ENUM ('google','tripadvisor','booking_com','expedia','other'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_response_status') THEN CREATE TYPE review_response_status AS ENUM ('pending','drafted','approved','posted'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_type') THEN CREATE TYPE agent_type AS ENUM ('pricing','demand_forecast','channel_mix','overbooking','night_audit','housekeeping','cancellation','guest_comms','review_response'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_mode') THEN CREATE TYPE agent_mode AS ENUM ('manual','suggest','autopilot'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_decision_status') THEN CREATE TYPE agent_decision_status AS ENUM ('pending','approved','rejected','auto_executed','expired'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'webhook_delivery_status') THEN CREATE TYPE webhook_delivery_status AS ENUM ('pending','delivered','failed'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -394,6 +401,93 @@ async function main() {
       date_range_end date,
       created_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // tax_profiles
+    `CREATE TABLE IF NOT EXISTS tax_profiles (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(100) NOT NULL,
+      jurisdiction_code varchar(50) NOT NULL,
+      is_active boolean NOT NULL DEFAULT true,
+      effective_from date NOT NULL,
+      effective_to date,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // tax_rules
+    `CREATE TABLE IF NOT EXISTS tax_rules (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      tax_profile_id uuid NOT NULL REFERENCES tax_profiles(id),
+      name varchar(100) NOT NULL,
+      code varchar(30) NOT NULL,
+      type tax_rule_type NOT NULL,
+      rate numeric(8,4) NOT NULL,
+      applies_to_charge_types text[],
+      exemptions jsonb,
+      is_compounding boolean NOT NULL DEFAULT false,
+      sort_order integer NOT NULL DEFAULT 0,
+      is_active boolean NOT NULL DEFAULT true,
+      effective_from date NOT NULL,
+      effective_to date,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // guest_reviews
+    `CREATE TABLE IF NOT EXISTS guest_reviews (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      source review_source NOT NULL,
+      guest_name varchar(200) NOT NULL,
+      rating integer NOT NULL,
+      review_text text NOT NULL,
+      stay_date varchar(10),
+      reservation_id uuid REFERENCES reservations(id),
+      response_status review_response_status NOT NULL DEFAULT 'pending',
+      response_text text,
+      responded_at timestamptz,
+      responded_by uuid,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // agent_configs
+    `CREATE TABLE IF NOT EXISTS agent_configs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      agent_type agent_type NOT NULL,
+      is_enabled boolean NOT NULL DEFAULT false,
+      mode agent_mode NOT NULL DEFAULT 'suggest',
+      autopilot_confidence_threshold numeric(3,2) DEFAULT '0.85',
+      config jsonb DEFAULT '{}'::jsonb,
+      model_state jsonb DEFAULT '{}'::jsonb,
+      last_trained_at timestamptz,
+      last_run_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS agent_configs_property_agent_unique ON agent_configs (property_id, agent_type)`,
+    // agent_decisions
+    `CREATE TABLE IF NOT EXISTS agent_decisions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      agent_type agent_type NOT NULL,
+      decision_type varchar(100) NOT NULL,
+      input_snapshot jsonb DEFAULT '{}'::jsonb,
+      recommendation jsonb DEFAULT '{}'::jsonb,
+      confidence numeric(3,2) NOT NULL,
+      status agent_decision_status NOT NULL DEFAULT 'pending',
+      approved_by uuid,
+      executed_at timestamptz,
+      outcome jsonb,
+      outcome_recorded_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // agent_training_snapshots
+    `CREATE TABLE IF NOT EXISTS agent_training_snapshots (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      agent_type agent_type NOT NULL,
+      snapshot_date date NOT NULL,
+      data jsonb DEFAULT '{}'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`,
     // agent_webhook_subscriptions
     `CREATE TABLE IF NOT EXISTS agent_webhook_subscriptions (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -409,6 +503,22 @@ async function main() {
       failure_count integer NOT NULL DEFAULT 0,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // webhook_deliveries
+    `CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      subscription_id uuid NOT NULL REFERENCES agent_webhook_subscriptions(id),
+      event_type varchar(100) NOT NULL,
+      payload jsonb NOT NULL,
+      status webhook_delivery_status NOT NULL DEFAULT 'pending',
+      attempts integer NOT NULL DEFAULT 0,
+      last_attempt_at timestamptz,
+      next_retry_at timestamptz,
+      last_status_code integer,
+      last_error text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      delivered_at timestamptz
     )`,
   ];
 
