@@ -61,22 +61,22 @@ export class RoomService {
       .where(and(...conditions));
   }
 
-  async findRoomById(id: string) {
+  async findRoomById(id: string, propertyId: string) {
     const [room] = await this.db
       .select()
       .from(rooms)
-      .where(eq(rooms.id, id));
+      .where(and(eq(rooms.id, id), eq(rooms.propertyId, propertyId)));
     if (!room) {
       throw new NotFoundException(`Room ${id} not found`);
     }
     return room;
   }
 
-  async updateRoom(id: string, dto: UpdateRoomDto) {
+  async updateRoom(id: string, propertyId: string, dto: UpdateRoomDto) {
     const [room] = await this.db
       .update(rooms)
       .set({ ...dto, updatedAt: new Date() })
-      .where(eq(rooms.id, id))
+      .where(and(eq(rooms.id, id), eq(rooms.propertyId, propertyId)))
       .returning();
     if (!room) {
       throw new NotFoundException(`Room ${id} not found`);

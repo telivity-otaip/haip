@@ -30,7 +30,7 @@ export class BookingComAdapter implements ChannelAdapter {
   constructor(private readonly configService: ConfigService) {}
 
   async pushAvailability(params: AvailabilityPushParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig(params.channelConnectionId);
+    const config = this.resolveConfig(params.connectionConfig);
     const payload = mapAvailabilityToOta(config.hotelId, params.items);
     const xml = buildOtaXml('OTA_HotelAvailNotifRQ', payload);
 
@@ -48,7 +48,7 @@ export class BookingComAdapter implements ChannelAdapter {
   }
 
   async pushRates(params: RatePushParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig(params.channelConnectionId);
+    const config = this.resolveConfig(params.connectionConfig);
     const payload = mapRatesToOta(config.hotelId, params.items);
     const xml = buildOtaXml('OTA_HotelRateAmountNotifRQ', payload);
 
@@ -66,7 +66,7 @@ export class BookingComAdapter implements ChannelAdapter {
   }
 
   async pushRestrictions(params: RestrictionPushParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig(params.channelConnectionId);
+    const config = this.resolveConfig(params.connectionConfig);
     const payload = mapRestrictionsToOta(config.hotelId, params.items);
     const xml = buildOtaXml('OTA_HotelRateAmountNotifRQ', payload);
 
@@ -84,7 +84,7 @@ export class BookingComAdapter implements ChannelAdapter {
   }
 
   async pullReservations(params: ReservationPullParams): Promise<ChannelReservationResult> {
-    const config = this.resolveConfig(params.channelConnectionId);
+    const config = this.resolveConfig(params.connectionConfig);
 
     const payload: Record<string, unknown> = {
       ReadRequests: {
@@ -126,7 +126,7 @@ export class BookingComAdapter implements ChannelAdapter {
   }
 
   async confirmReservation(params: ConfirmReservationParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig(params.channelConnectionId);
+    const config = this.resolveConfig(params.connectionConfig);
     const payload = buildReservationConfirmation(
       params.externalConfirmation,
       params.pmsConfirmationNumber,
@@ -143,7 +143,7 @@ export class BookingComAdapter implements ChannelAdapter {
   }
 
   async cancelReservation(params: CancelReservationParams): Promise<ChannelSyncResult> {
-    const config = this.resolveConfig(params.channelConnectionId);
+    const config = this.resolveConfig(params.connectionConfig);
 
     const payload = {
       UniqueID: {
@@ -253,32 +253,31 @@ export class BookingComAdapter implements ChannelAdapter {
 
   /**
    * Resolve config for a channel connection.
-   * In production, config would come from the channel connection record.
-   * Falls back to env vars for simple setup.
+   * Prefers per-connection credentials from channelConnections.config (passed via params.connectionConfig);
+   * falls back to env vars only when a value is missing from the connection record.
    */
-  private resolveConfig(_channelConnectionId: string): BookingComConfig {
-    return {
-      hotelId: this.configService.get<string>('BOOKING_COM_HOTEL_ID', 'MOCK_HOTEL_1'),
-      username: this.configService.get<string>('BOOKING_COM_USERNAME', 'haip_test'),
-      password: this.configService.get<string>('BOOKING_COM_PASSWORD', 'test_password'),
-      baseUrl: this.configService.get<string>(
-        'BOOKING_COM_BASE_URL',
-        DEFAULT_BOOKING_COM_CONFIG.baseUrl!,
-      ),
-      timeoutMs: DEFAULT_BOOKING_COM_CONFIG.timeoutMs,
-      maxRetries: DEFAULT_BOOKING_COM_CONFIG.maxRetries,
-    };
+  private resolveConfig(connectionConfig?: Record<string, unknown>): BookingComConfig {
+    return this.buildConfig(connectionConfig ?? {});
   }
 
   private buildConfig(config: Record<string, unknown>): BookingComConfig {
+    const hotelId = config['hotelId'];
+    const username = config['username'];
+    const password = config['password'];
+    const baseUrl = config['baseUrl'];
     return {
-      hotelId: String(config['hotelId'] ?? this.configService.get<string>('BOOKING_COM_HOTEL_ID', 'MOCK_HOTEL_1')),
-      username: String(config['username'] ?? this.configService.get<string>('BOOKING_COM_USERNAME', 'haip_test')),
-      password: String(config['password'] ?? this.configService.get<string>('BOOKING_COM_PASSWORD', 'test_password')),
-      baseUrl: String(
-        config['baseUrl'] ??
-          this.configService.get<string>('BOOKING_COM_BASE_URL', DEFAULT_BOOKING_COM_CONFIG.baseUrl!),
-      ),
+      hotelId: hotelId != null && hotelId !== ''
+        ? String(hotelId)
+        : this.configService.get<string>('BOOKING_COM_HOTEL_ID', 'MOCK_HOTEL_1'),
+      username: username != null && username !== ''
+        ? String(username)
+        : this.configService.get<string>('BOOKING_COM_USERNAME', 'haip_test'),
+      password: password != null && password !== ''
+        ? String(password)
+        : this.configService.get<string>('BOOKING_COM_PASSWORD', 'test_password'),
+      baseUrl: baseUrl != null && baseUrl !== ''
+        ? String(baseUrl)
+        : this.configService.get<string>('BOOKING_COM_BASE_URL', DEFAULT_BOOKING_COM_CONFIG.baseUrl!),
       timeoutMs: DEFAULT_BOOKING_COM_CONFIG.timeoutMs,
       maxRetries: DEFAULT_BOOKING_COM_CONFIG.maxRetries,
     };
