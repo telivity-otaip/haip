@@ -1,6 +1,6 @@
 import { Injectable, Inject, ConflictException, NotFoundException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { bookings, reservations, guests, channelConnections } from '@haip/database';
+import { bookings, reservations, guests, channelConnections } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { ChannelService } from './channel.service';
 import { ChannelAdapterFactory } from './channel-adapter.factory';

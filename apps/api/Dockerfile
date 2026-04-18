@@ -20,14 +20,14 @@ COPY apps/api/ ./apps/api/
 COPY apps/dashboard/ ./apps/dashboard/
 
 # Build workspace packages
-RUN pnpm --filter @haip/shared run build
-RUN pnpm --filter @haip/database run build
+RUN pnpm --filter @telivityhaip/shared run build
+RUN pnpm --filter @telivityhaip/database run build
 
 # Build dashboard (Vite static output)
 RUN pnpm --filter dashboard run build
 
 # Build API (NestJS)
-RUN pnpm --filter @haip/api run build
+RUN pnpm --filter @telivityhaip/api run build
 
 # Production stage
 FROM node:20-alpine AS production

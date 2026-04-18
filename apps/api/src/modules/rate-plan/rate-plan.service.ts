@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { ratePlans, rateRestrictions } from '@haip/database';
+import { ratePlans, rateRestrictions } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateRatePlanDto } from './dto/create-rate-plan.dto';
 import { UpdateRatePlanDto } from './dto/update-rate-plan.dto';

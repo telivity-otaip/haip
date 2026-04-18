@@ -1,5 +1,5 @@
 {
-  "name": "@haip/api",
+  "name": "@telivityhaip/api",
   "version": "0.0.1",
   "description": "HAIP API — NestJS REST API for the Hotel AI Platform",
   "private": true,
@@ -17,8 +17,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@haip/database": "workspace:*",
-    "@haip/shared": "workspace:^",
+    "@telivityhaip/database": "workspace:*",
+    "@telivityhaip/shared": "workspace:^",
     "@nestjs/common": "^10.4.0",
     "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.4.0",

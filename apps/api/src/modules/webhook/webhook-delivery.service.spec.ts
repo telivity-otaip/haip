@@ -16,7 +16,7 @@ function createStatefulMockDb(subscription: any) {
   let currentTable: 'webhook_deliveries' | 'subscriptions' = 'webhook_deliveries';
 
   const identifyTable = (tbl: any): 'webhook_deliveries' | 'subscriptions' => {
-    // @haip/database exports identifiable symbols on each pgTable. Fall back
+    // @telivityhaip/database exports identifiable symbols on each pgTable. Fall back
     // to a constructor-name check; the test just needs to distinguish.
     const name = tbl?.[Symbol.for('drizzle:Name')] ?? tbl?._?.name ?? '';
     if (String(name).includes('webhook_deliveries')) return 'webhook_deliveries';

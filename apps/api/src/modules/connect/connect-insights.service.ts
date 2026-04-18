@@ -7,7 +7,7 @@ import {
   rooms,
   ratePlans,
   housekeepingTasks,
-} from '@haip/database';
+} from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 
 @Injectable()
@@ -403,7 +403,7 @@ export class ConnectInsightsService {
   }
 
   private async getGuestInfo(guestId: string) {
-    const { guests } = await import('@haip/database');
+    const { guests } = await import('@telivityhaip/database');
     const [guest] = await this.db
       .select()
       .from(guests)

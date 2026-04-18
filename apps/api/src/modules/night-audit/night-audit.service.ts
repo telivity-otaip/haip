@@ -15,7 +15,7 @@ import {
   ratePlans,
   properties,
   rooms,
-} from '@haip/database';
+} from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { FolioService } from '../folio/folio.service';
 import { ReservationService } from '../reservation/reservation.service';

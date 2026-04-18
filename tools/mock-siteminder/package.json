@@ -1,5 +1,5 @@
 {
-  "name": "@haip/mock-siteminder",
+  "name": "@telivityhaip/mock-siteminder",
   "version": "0.0.1",
   "private": true,
   "description": "Mock SiteMinder pmsXchange API for development and testing",

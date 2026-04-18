@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, notInArray, lte, gte, sql } from 'drizzle-orm';
-import { reservations, roomTypes, properties, rooms } from '@haip/database';
+import { reservations, roomTypes, properties, rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface AvailabilityResult {

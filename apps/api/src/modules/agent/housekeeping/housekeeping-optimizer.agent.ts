@@ -1,6 +1,6 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { housekeepingTasks, rooms, reservations, guests } from '@haip/database';
+import { housekeepingTasks, rooms, reservations, guests } from '@telivityhaip/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import type {

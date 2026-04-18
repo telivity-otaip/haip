@@ -1,9 +1,20 @@
 {
-  "name": "@haip/shared",
+  "name": "@telivityhaip/shared",
   "version": "0.0.1",
   "description": "HAIP shared types, constants, and utilities",
-  "private": true,
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/telivity-otaip/haip.git",
+    "directory": "packages/shared"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

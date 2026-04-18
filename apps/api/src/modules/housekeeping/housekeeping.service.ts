@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, sql, desc, asc, inArray, gte, lt } from 'drizzle-orm';
-import { housekeepingTasks, rooms, reservations, guests, properties, roomTypes } from '@haip/database';
+import { housekeepingTasks, rooms, reservations, guests, properties, roomTypes } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService, type WebhookPayload } from '../webhook/webhook.service';
 import { RoomStatusService } from '../room/room-status.service';

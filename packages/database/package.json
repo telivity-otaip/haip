@@ -1,9 +1,20 @@
 {
-  "name": "@haip/database",
+  "name": "@telivityhaip/database",
   "version": "0.0.1",
   "description": "HAIP database schema and migrations (Drizzle ORM + PostgreSQL)",
-  "private": true,
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/telivity-otaip/haip.git",
+    "directory": "packages/database"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

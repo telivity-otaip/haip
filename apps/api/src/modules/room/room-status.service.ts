@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
-import { rooms } from '@haip/database';
+import { rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 

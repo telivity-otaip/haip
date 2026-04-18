@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { ratePlans, channelConnections } from '@haip/database';
+import { ratePlans, channelConnections } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 
 export interface RateParityResult {

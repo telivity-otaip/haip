@@ -9,7 +9,7 @@ import {
   auditRuns,
   properties,
   rooms,
-} from '@haip/database';
+} from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 
 @Injectable()

@@ -1,7 +1,7 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@haip/database';
+import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
 import { WebhookService } from '../webhook/webhook.service';
@@ -444,7 +444,7 @@ export class ConnectBookingService {
   }
 
   private async getPropertySettings(propertyId: string): Promise<Record<string, unknown>> {
-    const { properties: props } = await import('@haip/database');
+    const { properties: props } = await import('@telivityhaip/database');
     const [property] = await this.db
       .select({ settings: props.settings })
       .from(props)

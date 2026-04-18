@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { eq, and, lte, sql } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { taxProfiles, taxRules, guests } from '@haip/database';
+import { taxProfiles, taxRules, guests } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateTaxProfileDto } from './dto/create-tax-profile.dto';
 import { UpdateTaxProfileDto } from './dto/update-tax-profile.dto';

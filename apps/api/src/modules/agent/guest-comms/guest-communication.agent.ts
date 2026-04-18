@@ -8,7 +8,7 @@ import {
   ratePlans,
   bookings,
   agentDecisions,
-} from '@haip/database';
+} from '@telivityhaip/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
 import { EmailService } from './email.service';

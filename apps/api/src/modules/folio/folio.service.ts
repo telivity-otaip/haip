@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import Decimal from 'decimal.js';
-import { folios, charges, payments } from '@haip/database';
+import { folios, charges, payments } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
 import { TaxService } from '../tax/tax.service';

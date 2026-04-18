@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { eq, and, desc } from 'drizzle-orm';
-import { guestReviews } from '@haip/database';
+import { guestReviews } from '@telivityhaip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';

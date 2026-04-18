@@ -2,7 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from '@haip/database';
+import * as schema from '@telivityhaip/database';
 
 export const DRIZZLE = Symbol('DRIZZLE');
 
