@@ -1,5 +1,5 @@
 import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { guestReviews, reservations, roomTypes, properties } from '@haip/database';
 import { DRIZZLE } from '../../../database/database.module';
 import { AgentService } from '../agent.service';
@@ -74,28 +74,26 @@ export class ReviewResponseAgent implements HaipAgent, OnModuleInit {
         );
     }
 
-    // Get stay details for matched reviews
-    const resIds = pendingReviews
-      .map((r: any) => r.reservationId)
-      .filter(Boolean);
+    // Get stay details for matched reviews — bulk load to avoid N+1
+    const resIds = [...new Set(pendingReviews.map((r: any) => r.reservationId).filter(Boolean))];
     const stayDetailsMap = new Map<string, { roomType?: string; nights?: number }>();
 
-    for (const resId of resIds) {
-      const [res] = await this.db
+    if (resIds.length > 0) {
+      const resData = await this.db
         .select()
         .from(reservations)
-        .where(eq(reservations.id, resId));
-      if (res) {
-        let roomTypeName: string | undefined;
-        if (res.roomTypeId) {
-          const [rt] = await this.db
-            .select()
-            .from(roomTypes)
-            .where(eq(roomTypes.id, res.roomTypeId));
-          roomTypeName = rt?.name;
-        }
-        stayDetailsMap.set(resId, {
-          roomType: roomTypeName,
+        .where(inArray(reservations.id, resIds as any));
+
+      const rtIds = [...new Set(resData.map((r: any) => r.roomTypeId).filter(Boolean))];
+      const rtData: any[] = rtIds.length > 0
+        ? await this.db.select().from(roomTypes).where(inArray(roomTypes.id, rtIds as any))
+        : [];
+      const rtMap = new Map(rtData.map((rt: any) => [rt.id, rt]));
+
+      for (const res of resData) {
+        const rt = res.roomTypeId ? rtMap.get(res.roomTypeId) : undefined;
+        stayDetailsMap.set(res.id, {
+          roomType: rt?.name,
           nights: res.nights,
         });
       }

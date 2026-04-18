@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, timestamp, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 import { reservations, bookings } from './reservation.js';
 import { guests } from './guest.js';
@@ -54,7 +54,10 @@ export const folios = pgTable('folios', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  uniqueFolioNumber: uniqueIndex('folios_property_folio_number_unique')
+    .on(table.propertyId, table.folioNumber),
+}));
 
 /**
  * Charge types for folio line items.
@@ -96,8 +99,8 @@ export const charges = pgTable('charges', {
   // Reference
   serviceDate: timestamp('service_date', { withTimezone: true }).notNull(), // Date the charge applies to
   isReversal: boolean('is_reversal').notNull().default(false),
-  originalChargeId: uuid('original_charge_id'), // FK to self for reversals
-  parentChargeId: uuid('parent_charge_id'), // FK to self — tax charges linked to their parent charge
+  originalChargeId: uuid('original_charge_id').references((): any => charges.id), // FK to self for reversals
+  parentChargeId: uuid('parent_charge_id').references((): any => charges.id), // FK to self — tax charges linked to their parent charge
 
   // Night audit lock (KB 5.8: transactions locked after day close)
   isLocked: boolean('is_locked').notNull().default(false),
@@ -163,7 +166,7 @@ export const payments = pgTable('payments', {
   preAuthExpiresAt: timestamp('pre_auth_expires_at', { withTimezone: true }),
 
   // Refund reference
-  originalPaymentId: uuid('original_payment_id'), // FK to self for refunds
+  originalPaymentId: uuid('original_payment_id').references((): any => payments.id), // FK to self for refunds
 
   notes: text('notes'),
 

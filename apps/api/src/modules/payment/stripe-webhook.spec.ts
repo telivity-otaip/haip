@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { StripeWebhookController } from './stripe-webhook.controller';
 import { WebhookService } from '../webhook/webhook.service';
+import { FolioService } from '../folio/folio.service';
 import { DRIZZLE } from '../../database/database.module';
 
 const mockPayment = {
@@ -33,6 +34,7 @@ function createMockDb(returnData: any[] = [mockPayment]) {
 }
 
 const mockWebhookService = { emit: vi.fn() };
+const mockFolioService = { recalculateBalance: vi.fn().mockResolvedValue(undefined) };
 const mockConfigService = {
   get: vi.fn().mockImplementation((key: string, defaultValue?: string) => {
     if (key === 'STRIPE_MODE') return 'mock';
@@ -55,6 +57,7 @@ describe('StripeWebhookController', () => {
       providers: [
         { provide: DRIZZLE, useValue: mockDb },
         { provide: WebhookService, useValue: mockWebhookService },
+        { provide: FolioService, useValue: mockFolioService },
         { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
@@ -98,6 +101,7 @@ describe('StripeWebhookController', () => {
         providers: [
           { provide: DRIZZLE, useValue: capturedDb },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
           { provide: ConfigService, useValue: mockConfigService },
         ],
       }).compile();
@@ -146,6 +150,7 @@ describe('StripeWebhookController', () => {
         providers: [
           { provide: DRIZZLE, useValue: capturedDb },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
           { provide: ConfigService, useValue: mockConfigService },
         ],
       }).compile();
@@ -175,6 +180,7 @@ describe('StripeWebhookController', () => {
         providers: [
           { provide: DRIZZLE, useValue: capturedDb },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
           { provide: ConfigService, useValue: mockConfigService },
         ],
       }).compile();
@@ -203,6 +209,7 @@ describe('StripeWebhookController', () => {
         providers: [
           { provide: DRIZZLE, useValue: emptyDb },
           { provide: WebhookService, useValue: mockWebhookService },
+          { provide: FolioService, useValue: mockFolioService },
           { provide: ConfigService, useValue: mockConfigService },
         ],
       }).compile();

@@ -60,45 +60,61 @@ export class ReservationService {
       throw new BadRequestException('Departure date must be after arrival date');
     }
 
+    // Check inventory availability
+    const availability = await this.availabilityService.searchAvailability(
+      dto.propertyId,
+      dto.arrivalDate,
+      dto.departureDate,
+      dto.roomTypeId,
+    );
+    const roomTypeAvail = availability.find((a: any) => a.roomTypeId === dto.roomTypeId);
+    if (!roomTypeAvail || roomTypeAvail.available <= 0) {
+      throw new BadRequestException(
+        `No availability for room type ${dto.roomTypeId} on the requested dates`,
+      );
+    }
+
     // Generate confirmation number
     const confirmationNumber = `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
 
-    // Create booking + reservation in a transaction-like flow
-    // (Drizzle postgres-js doesn't have built-in transactions in the same way,
-    //  but the operations are sequential and atomic per statement)
-    const [booking] = await this.db
-      .insert(bookings)
-      .values({
-        propertyId: dto.propertyId,
-        guestId: dto.guestId,
-        confirmationNumber,
-        externalConfirmation: dto.externalConfirmation,
-        source: dto.source,
-        channelCode: dto.channelCode,
-      })
-      .returning();
+    // Create booking + reservation in a transaction
+    const result = await this.db.transaction(async (tx: any) => {
+      const [booking] = await tx
+        .insert(bookings)
+        .values({
+          propertyId: dto.propertyId,
+          guestId: dto.guestId,
+          confirmationNumber,
+          externalConfirmation: dto.externalConfirmation,
+          source: dto.source,
+          channelCode: dto.channelCode,
+        })
+        .returning();
 
-    const [reservation] = await this.db
-      .insert(reservations)
-      .values({
-        propertyId: dto.propertyId,
-        bookingId: booking.id,
-        guestId: dto.guestId,
-        arrivalDate: dto.arrivalDate,
-        departureDate: dto.departureDate,
-        nights,
-        roomTypeId: dto.roomTypeId,
-        ratePlanId: dto.ratePlanId,
-        totalAmount: dto.totalAmount,
-        currencyCode: dto.currencyCode,
-        adults: dto.adults ?? 1,
-        children: dto.children ?? 0,
-        specialRequests: dto.specialRequests,
-        status: 'pending',
-      })
-      .returning();
+      const [reservation] = await tx
+        .insert(reservations)
+        .values({
+          propertyId: dto.propertyId,
+          bookingId: booking.id,
+          guestId: dto.guestId,
+          arrivalDate: dto.arrivalDate,
+          departureDate: dto.departureDate,
+          nights,
+          roomTypeId: dto.roomTypeId,
+          ratePlanId: dto.ratePlanId,
+          totalAmount: dto.totalAmount,
+          currencyCode: dto.currencyCode,
+          adults: dto.adults ?? 1,
+          children: dto.children ?? 0,
+          specialRequests: dto.specialRequests,
+          status: 'pending',
+        })
+        .returning();
 
-    return { ...reservation, booking };
+      return { ...reservation, booking };
+    });
+
+    return result;
   }
 
   async confirm(id: string) {
@@ -117,13 +133,13 @@ export class ReservationService {
     const reservation = await this.findByIdRaw(id);
     assertTransition(reservation.status as ReservationStatus, 'assigned');
 
-    // Verify room exists and matches room type
+    // Verify room exists, belongs to same property, and matches room type
     const [room] = await this.db
       .select()
       .from(rooms)
-      .where(eq(rooms.id, dto.roomId));
+      .where(and(eq(rooms.id, dto.roomId), eq(rooms.propertyId, reservation.propertyId)));
     if (!room) {
-      throw new NotFoundException(`Room ${dto.roomId} not found`);
+      throw new NotFoundException(`Room ${dto.roomId} not found in this property`);
     }
     if (room.roomTypeId !== reservation.roomTypeId) {
       throw new BadRequestException(
@@ -196,9 +212,9 @@ export class ReservationService {
       const [room] = await this.db
         .select()
         .from(rooms)
-        .where(eq(rooms.id, dto.roomId));
+        .where(and(eq(rooms.id, dto.roomId), eq(rooms.propertyId, reservation.propertyId)));
       if (!room) {
-        throw new NotFoundException(`Room ${dto.roomId} not found`);
+        throw new NotFoundException(`Room ${dto.roomId} not found in this property`);
       }
       if (room.roomTypeId !== reservation.roomTypeId) {
         throw new BadRequestException(
@@ -398,10 +414,10 @@ export class ReservationService {
     const folioSummary: Array<{ folioId: string; balance: string; status: string }> = [];
 
     if (dto.expressCheckout) {
+      // Phase 1: Capture all authorized payments across all open folios
       for (const folio of folios) {
         if (folio.status !== 'open') continue;
 
-        // Capture all authorized payments
         const authorizedPayments = await this.db
           .select()
           .from(payments)
@@ -420,17 +436,25 @@ export class ReservationService {
             // Continue with other payments
           }
         }
+      }
 
-        // Refresh folio to check balance
+      // Phase 2: Validate all folio balances BEFORE settling any
+      const openFolios: Array<{ folio: any; refreshed: any }> = [];
+      for (const folio of folios) {
+        if (folio.status !== 'open') continue;
         const refreshed = await this.folioService.findById(folio.id, reservation.propertyId);
-        if (Math.abs(parseFloat(refreshed.balance)) <= 0.01) {
-          await this.folioService.settle(folio.id, reservation.propertyId);
-          folioSummary.push({ folioId: folio.id, balance: '0.00', status: 'settled' });
-        } else {
+        if (Math.abs(parseFloat(refreshed.balance)) > 0.01) {
           throw new BadRequestException(
             `Cannot express checkout: folio ${folio.folioNumber} has outstanding balance of ${refreshed.balance}`,
           );
         }
+        openFolios.push({ folio, refreshed });
+      }
+
+      // Phase 3: All validated — now settle
+      for (const { folio } of openFolios) {
+        await this.folioService.settle(folio.id, reservation.propertyId);
+        folioSummary.push({ folioId: folio.id, balance: '0.00', status: 'settled' });
       }
     } else {
       // Non-express: compile folio summaries

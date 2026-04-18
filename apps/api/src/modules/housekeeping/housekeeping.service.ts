@@ -755,12 +755,32 @@ export class HousekeepingService {
   async handleRoomStatusChanged(payload: WebhookPayload) {
     if (payload.data['newStatus'] !== 'vacant_dirty') return;
 
+    const today = new Date().toISOString().split('T')[0]!;
+    const propertyId = payload.propertyId!;
+    const roomId = payload.entityId;
+
+    // Check for existing checkout task for this room + date to avoid duplicates
+    const [existing] = await this.db
+      .select({ id: housekeepingTasks.id })
+      .from(housekeepingTasks)
+      .where(
+        and(
+          eq(housekeepingTasks.propertyId, propertyId),
+          eq(housekeepingTasks.roomId, roomId),
+          eq(housekeepingTasks.serviceDate, new Date(today)),
+          eq(housekeepingTasks.type, 'checkout' as any),
+          sql`${housekeepingTasks.status} not in ('skipped', 'inspected')`,
+        ),
+      );
+
+    if (existing) return;
+
     await this.create({
-      propertyId: payload.propertyId!,
-      roomId: payload.entityId,
+      propertyId,
+      roomId,
       type: 'checkout',
       priority: 0,
-      serviceDate: new Date().toISOString().split('T')[0]!,
+      serviceDate: today,
     });
   }
 

@@ -2,10 +2,6 @@ import { IsString, IsInt, Min, Max, IsOptional, IsUUID, IsIn } from 'class-valid
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateReviewDto {
-  @ApiProperty()
-  @IsUUID()
-  propertyId!: string;
-
   @ApiProperty({ enum: ['google', 'tripadvisor', 'booking_com', 'expedia', 'other'] })
   @IsIn(['google', 'tripadvisor', 'booking_com', 'expedia', 'other'])
   source!: string;

@@ -72,7 +72,7 @@ export const rooms = pgTable('rooms', {
   // Features (override room type defaults)
   isAccessible: boolean('is_accessible').notNull().default(false),
   isConnecting: boolean('is_connecting').notNull().default(false),
-  connectingRoomId: uuid('connecting_room_id'), // Self-referencing FK
+  connectingRoomId: uuid('connecting_room_id').references((): any => rooms.id), // Self-referencing FK
   amenities: jsonb('amenities').$type<string[]>(), // Room-specific overrides
 
   // Maintenance

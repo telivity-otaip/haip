@@ -14,6 +14,7 @@ import { eq } from 'drizzle-orm';
 import { payments } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
+import { FolioService } from '../folio/folio.service';
 import Stripe from 'stripe';
 
 /**
@@ -38,6 +39,7 @@ export class StripeWebhookController {
   constructor(
     @Inject(DRIZZLE) private readonly db: any,
     private readonly webhookService: WebhookService,
+    private readonly folioService: FolioService,
     private readonly configService: ConfigService,
   ) {
     const secretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
@@ -130,6 +132,9 @@ export class StripeWebhookController {
       .set({ status: 'captured', processedAt: new Date(), updatedAt: new Date() })
       .where(eq(payments.id, payment.id));
 
+    // Recalculate folio balance after payment state change
+    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+
     await this.webhookService.emit(
       'payment.received',
       'payment',
@@ -154,6 +159,9 @@ export class StripeWebhookController {
       .set({ status: 'failed', notes: errorMessage, updatedAt: new Date() })
       .where(eq(payments.id, payment.id));
 
+    // Recalculate folio balance after payment state change
+    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
+
     await this.webhookService.emit(
       'payment.failed',
       'payment',
@@ -175,6 +183,9 @@ export class StripeWebhookController {
       .update(payments)
       .set({ status: 'voided', updatedAt: new Date() })
       .where(eq(payments.id, payment.id));
+
+    // Recalculate folio balance after payment state change
+    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
 
     await this.webhookService.emit(
       'payment.failed',
@@ -205,6 +216,9 @@ export class StripeWebhookController {
       .update(payments)
       .set({ status, updatedAt: new Date() })
       .where(eq(payments.id, payment.id));
+
+    // Recalculate folio balance after refund
+    await this.folioService.recalculateBalance(payment.folioId, payment.propertyId);
 
     await this.webhookService.emit(
       'payment.refunded',

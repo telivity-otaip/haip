@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsString, IsNumber, IsOptional, IsObject, Min, Max } from 'class-validator';
+import { IsBoolean, IsString, IsNumber, IsOptional, IsObject, IsIn, Min, Max } from 'class-validator';
 
 export class UpdateAgentConfigDto {
   @ApiPropertyOptional()
@@ -9,7 +9,7 @@ export class UpdateAgentConfigDto {
 
   @ApiPropertyOptional({ enum: ['manual', 'suggest', 'autopilot'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['manual', 'suggest', 'autopilot'])
   mode?: string;
 
   @ApiPropertyOptional({ description: 'Confidence threshold for autopilot (0.0–1.0)' })

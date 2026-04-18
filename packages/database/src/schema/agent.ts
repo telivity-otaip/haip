@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, numeric, jsonb, timestamp, date, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, numeric, jsonb, timestamp, date, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
 export const agentTypeEnum = pgEnum('agent_type', [
@@ -49,7 +49,10 @@ export const agentConfigs = pgTable('agent_configs', {
   lastRunAt: timestamp('last_run_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => ({
+  uniquePropertyAgent: uniqueIndex('agent_configs_property_agent_unique')
+    .on(table.propertyId, table.agentType),
+}));
 
 /**
  * Every recommendation/action an agent makes.

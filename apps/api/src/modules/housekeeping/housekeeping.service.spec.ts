@@ -333,8 +333,9 @@ describe('HousekeepingService — CRUD', () => {
   it('should auto-create checkout task on room.status_changed (vacant_dirty)', async () => {
     const db = createMockDb({
       selectResult: [
-        [{ isAccessible: false }],
-        [],
+        [],                       // 1st select: no existing checkout task (duplicate check)
+        [{ isAccessible: false }], // 2nd select: room accessibility check
+        [],                       // 3rd select: VIP check
       ],
     });
     const svc = await createService(db);
