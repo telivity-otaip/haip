@@ -68,9 +68,11 @@ export class PaymentService {
       throw new BadRequestException('Cannot authorize payment on a folio that is not open');
     }
 
+    // Gateway expects a number; keep the canonical stored value as the string.
+    // Decimal keeps precision through the conversion boundary.
     const result = await this.gateway.authorize(
       dto.gatewayPaymentToken,
-      parseFloat(dto.amount),
+      new Decimal(dto.amount).toNumber(),
       dto.currencyCode,
     );
 
@@ -189,7 +191,7 @@ export class PaymentService {
     // Phase 2: call Stripe outside the DB tx with an idempotency key
     const result = await this.gateway.capture(
       claimed.gatewayTransactionId,
-      parseFloat(claimed.amount),
+      new Decimal(claimed.amount).toNumber(),
       { idempotencyKey: `cap_${id}` },
     );
 

@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, lte, sql } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import { taxProfiles, taxRules, guests } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateTaxProfileDto } from './dto/create-tax-profile.dto';
@@ -197,7 +198,9 @@ export class TaxService {
       guest = g ?? null;
     }
 
-    const amount = parseFloat(chargeAmount);
+    // Monetary math: use Decimal on string inputs to preserve precision
+    // (numeric columns are strings in drizzle).
+    const amount = new Decimal(chargeAmount);
     const items: TaxLineItem[] = [];
     let runningBase = amount;
 
@@ -229,40 +232,41 @@ export class TaxService {
         }
       }
 
-      // Calculate tax amount
-      const rateValue = parseFloat(rule.rate);
-      let taxAmount: number;
+      // Calculate tax amount using Decimal arithmetic
+      const rateValue = new Decimal(rule.rate);
+      let taxAmount: Decimal;
 
       switch (rule.type) {
         case 'percentage': {
           const base = rule.isCompounding ? runningBase : amount;
-          taxAmount = base * rateValue / 100;
+          taxAmount = base.times(rateValue).div(100);
           break;
         }
         case 'flat_per_night':
-          taxAmount = rateValue * (options?.numberOfNights ?? 1);
+          taxAmount = rateValue.times(options?.numberOfNights ?? 1);
           break;
         case 'flat_per_stay':
           taxAmount = rateValue;
           break;
         default:
-          taxAmount = 0;
+          taxAmount = new Decimal(0);
       }
 
-      taxAmount = Math.round(taxAmount * 100) / 100;
+      // Round at the posting boundary to 2 decimals
+      const taxAmountRounded = new Decimal(taxAmount.toFixed(2));
 
-      if (taxAmount > 0) {
+      if (taxAmountRounded.gt(0)) {
         items.push({
           name: rule.name,
           code: rule.code,
           type: rule.type,
           rate: rule.rate,
-          amount: taxAmount.toFixed(2),
+          amount: taxAmountRounded.toFixed(2),
           isCompounding: rule.isCompounding,
         });
 
         // Update running base for compounding
-        runningBase += taxAmount;
+        runningBase = runningBase.plus(taxAmountRounded);
       }
     }
 
@@ -287,11 +291,13 @@ export class TaxService {
       return { baseAmount: totalAmount, taxes: [] };
     }
 
-    const total = parseFloat(totalAmount);
+    // Monetary math: use Decimal on strings. Back-calc net from gross as
+    //   net = (gross - flats) / (1 + totalPercentRate/100)
+    const total = new Decimal(totalAmount);
 
     // Separate flat and percentage rules (simplified — ignores compounding for back-calc)
-    let totalPercentageRate = 0;
-    let totalFlat = 0;
+    let totalPercentageRate = new Decimal(0);
+    let totalFlat = new Decimal(0);
 
     for (const rule of profile.rules) {
       if (rule.appliesToChargeTypes && rule.appliesToChargeTypes.length > 0) {
@@ -300,23 +306,24 @@ export class TaxService {
         }
       }
 
-      const rateValue = parseFloat(rule.rate);
+      const rateValue = new Decimal(rule.rate);
       switch (rule.type) {
         case 'percentage':
-          totalPercentageRate += rateValue;
+          totalPercentageRate = totalPercentageRate.plus(rateValue);
           break;
         case 'flat_per_night':
-          totalFlat += rateValue * (options?.numberOfNights ?? 1);
+          totalFlat = totalFlat.plus(rateValue.times(options?.numberOfNights ?? 1));
           break;
         case 'flat_per_stay':
-          totalFlat += rateValue;
+          totalFlat = totalFlat.plus(rateValue);
           break;
       }
     }
 
-    const afterFlat = total - totalFlat;
-    const baseAmount = afterFlat / (1 + totalPercentageRate / 100);
-    const baseStr = (Math.round(baseAmount * 100) / 100).toFixed(2);
+    const afterFlat = total.minus(totalFlat);
+    const divisor = new Decimal(1).plus(totalPercentageRate.div(100));
+    const baseAmount = afterFlat.div(divisor);
+    const baseStr = baseAmount.toFixed(2);
 
     // Recalculate forward to get exact tax line items
     const taxes = await this.calculateTaxes(baseStr, chargeType, propertyId, serviceDate, options);

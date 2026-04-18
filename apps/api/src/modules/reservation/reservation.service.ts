@@ -7,6 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import { reservations, bookings, guests, rooms, roomTypes, ratePlans, properties, payments } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { assertTransition, type ReservationStatus } from './reservation-state-machine';
@@ -366,7 +367,7 @@ export class ReservationService {
     if (!dto.skipDepositAuth && paymentToken) {
       const depositAmount = dto.depositAmount
         ? String(dto.depositAmount)
-        : (parseFloat(reservation.totalAmount) * 1.2).toFixed(2);
+        : new Decimal(reservation.totalAmount).times('1.2').toFixed(2);
       try {
         depositAuth = await this.paymentService.authorizePayment({
           folioId: folio.id,
@@ -488,7 +489,7 @@ export class ReservationService {
       for (const folio of folios) {
         if (folio.status !== 'open') continue;
         const refreshed = await this.folioService.findById(folio.id, reservation.propertyId);
-        if (Math.abs(parseFloat(refreshed.balance)) > 0.01) {
+        if (new Decimal(refreshed.balance).abs().gt('0.01')) {
           throw new BadRequestException(
             `Cannot express checkout: folio ${folio.folioNumber} has outstanding balance of ${refreshed.balance}`,
           );

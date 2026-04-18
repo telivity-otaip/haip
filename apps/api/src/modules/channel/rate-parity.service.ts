@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, gte, lte } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import { ratePlans, channelConnections } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 
@@ -65,7 +66,7 @@ export class RateParityService {
     const results: RateParityResult[] = [];
 
     for (const plan of plans) {
-      const baseAmount = parseFloat(plan.baseAmount);
+      const baseAmount = new Decimal(plan.baseAmount).toNumber();
       const channels: RateParityResult['channels'] = [];
       let parityViolations = 0;
 
@@ -83,16 +84,16 @@ export class RateParityService {
         const overrides = (config['rateOverrides'] as RateOverride[] | undefined) ?? [];
         const override = overrides.find((o) => o.ratePlanId === plan.id);
 
-        let effectiveRate = baseAmount;
+        let effectiveRateDec = new Decimal(baseAmount);
         let hasOverride = false;
 
         if (override) {
           hasOverride = true;
-          effectiveRate = this.applyOverride(baseAmount, override);
+          effectiveRateDec = this.applyOverrideDecimal(effectiveRateDec, override);
         }
 
-        const variance = Math.abs(effectiveRate - baseAmount);
-        const isParity = variance < 0.01; // Within 1 cent tolerance
+        const varianceDec = effectiveRateDec.minus(baseAmount).abs();
+        const isParity = varianceDec.lt('0.01'); // Within 1 cent tolerance
 
         if (!isParity) {
           parityViolations++;
@@ -103,10 +104,10 @@ export class RateParityService {
           channelCode: conn.channelCode,
           channelName: conn.channelName,
           channelRateCode: mapping.channelRateCode,
-          effectiveRate: Math.round(effectiveRate * 100) / 100,
+          effectiveRate: Number(effectiveRateDec.toFixed(2)),
           hasOverride,
           isParity,
-          variance: Math.round(variance * 100) / 100,
+          variance: Number(varianceDec.toFixed(2)),
         });
       }
 
@@ -152,10 +153,11 @@ export class RateParityService {
       );
 
     if (!conn) {
-      return { baseAmount: parseFloat(plan.baseAmount), effectiveRate: parseFloat(plan.baseAmount), hasOverride: false };
+      const base = new Decimal(plan.baseAmount).toNumber();
+      return { baseAmount: base, effectiveRate: base, hasOverride: false };
     }
 
-    const baseAmount = parseFloat(plan.baseAmount);
+    const baseAmount = new Decimal(plan.baseAmount).toNumber();
     const config = (conn.config ?? {}) as Record<string, unknown>;
     const overrides = (config['rateOverrides'] as RateOverride[] | undefined) ?? [];
 
@@ -166,10 +168,10 @@ export class RateParityService {
       return { baseAmount, effectiveRate: baseAmount, hasOverride: false };
     }
 
-    const effectiveRate = this.applyOverride(baseAmount, applicableOverride);
+    const effectiveRateDec = this.applyOverrideDecimal(new Decimal(baseAmount), applicableOverride);
     return {
       baseAmount,
-      effectiveRate: Math.round(effectiveRate * 100) / 100,
+      effectiveRate: Number(effectiveRateDec.toFixed(2)),
       hasOverride: true,
       override: applicableOverride,
     };
@@ -271,11 +273,17 @@ export class RateParityService {
   // --- Private Helpers ---
 
   private applyOverride(baseAmount: number, override: RateOverride): number {
+    return this.applyOverrideDecimal(new Decimal(baseAmount), override).toNumber();
+  }
+
+  // Decimal-safe override math — preferred internally to avoid float drift on
+  // percentage adjustments (e.g. 10% of 127.35 drifts under JS multiply).
+  private applyOverrideDecimal(baseAmount: Decimal, override: RateOverride): Decimal {
     if (override.adjustmentType === 'percentage') {
-      return baseAmount * (1 + override.adjustmentValue / 100);
+      return baseAmount.times(new Decimal(1).plus(new Decimal(override.adjustmentValue).div(100)));
     }
     // Fixed adjustment
-    return baseAmount + override.adjustmentValue;
+    return baseAmount.plus(override.adjustmentValue);
   }
 
   private findApplicableOverride(

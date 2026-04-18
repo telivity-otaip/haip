@@ -1,6 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import { ariSyncLogs, ratePlans, rateRestrictions } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { ChannelAdapterFactory } from './channel-adapter.factory';
@@ -166,7 +167,7 @@ export class AriService {
         const end = new Date(endDate);
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
           const dateStr = d.toISOString().split('T')[0]!;
-          const baseRate = parseFloat(ratePlan.baseAmount);
+          const baseRate = new Decimal(ratePlan.baseAmount).toNumber();
 
           rateItems.push({
             channelRoomCode: roomMapping.channelRoomCode,
