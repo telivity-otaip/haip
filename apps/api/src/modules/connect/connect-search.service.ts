@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, gte, lte } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import { properties, roomTypes, ratePlans, rateRestrictions } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
@@ -270,7 +271,7 @@ export class ConnectSearchService {
     checkOut: string,
     taxRate: number,
   ) {
-    const baseAmount = parseFloat(plan.baseAmount);
+    const baseAmount = new Decimal(plan.baseAmount).toNumber();
 
     // Get restrictions for the date range
     const restrictions = await this.db
@@ -307,9 +308,10 @@ export class ConnectSearchService {
     if (minLos && nights < minLos) return null;
     if (maxLos && maxLos !== Infinity && nights > maxLos) return null;
 
-    // Build nightly breakdown
+    // Build nightly breakdown — Decimal for all per-night money math
     const nightlyBreakdown = [];
-    let totalAmount = 0;
+    let totalAmountDec = new Decimal(0);
+    const taxRateDec = new Decimal(taxRate).div(100);
     for (let i = 0; i < nights; i++) {
       const date = new Date(arrival);
       date.setDate(date.getDate() + i);
@@ -317,24 +319,25 @@ export class ConnectSearchService {
 
       // Check for day-of-week overrides
       const dayName = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-      let nightRate = baseAmount;
+      let nightRateDec = new Decimal(baseAmount);
 
       for (const restriction of restrictions) {
         const overrides = (restriction.dayOfWeekOverrides ?? {}) as Record<string, number>;
         if (overrides[dayName]) {
-          nightRate = baseAmount + overrides[dayName]!;
+          nightRateDec = new Decimal(baseAmount).plus(overrides[dayName]!);
         }
       }
 
-      const taxAmount = nightRate * (taxRate / 100);
+      const taxAmountDec = nightRateDec.times(taxRateDec);
       nightlyBreakdown.push({
         date: dateStr,
-        baseRate: Math.round(nightRate * 100) / 100,
-        taxAmount: Math.round(taxAmount * 100) / 100,
-        totalRate: Math.round((nightRate + taxAmount) * 100) / 100,
+        baseRate: Number(nightRateDec.toFixed(2)),
+        taxAmount: Number(taxAmountDec.toFixed(2)),
+        totalRate: Number(nightRateDec.plus(taxAmountDec).toFixed(2)),
       });
-      totalAmount += nightRate + taxAmount;
+      totalAmountDec = totalAmountDec.plus(nightRateDec).plus(taxAmountDec);
     }
+    const totalAmount = Number(totalAmountDec.toFixed(2));
 
     // Build cancellation policy
     const cancellationPolicy = this.buildCancellationPolicy(plan);
@@ -344,7 +347,7 @@ export class ConnectSearchService {
       ratePlanName: plan.name,
       ratePlanCode: plan.code,
       rateType: plan.type,
-      totalAmount: Math.round(totalAmount * 100) / 100,
+      totalAmount,
       currencyCode: plan.currencyCode,
       nightlyBreakdown,
       cancellationPolicy,

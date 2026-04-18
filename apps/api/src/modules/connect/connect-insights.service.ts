@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import {
   properties,
   reservations,
@@ -47,14 +48,15 @@ export class ConnectInsightsService {
     const roomsAvailable = Math.max(0, totalRooms - roomsSold);
     const occupancyRate = totalRooms > 0 ? (roomsSold / totalRooms) * 100 : 0;
 
-    // Calculate ADR
-    const totalRevenue = soldReservations.reduce((sum: number, r: any) => {
-      const amount = parseFloat(r.totalAmount) || 0;
+    // Calculate ADR via Decimal — displayed as currency
+    const totalRevenueDec = soldReservations.reduce((sum: Decimal, r: any) => {
+      const amount = r.totalAmount ? new Decimal(r.totalAmount) : new Decimal(0);
       const nights = r.nights || 1;
-      return sum + (amount / nights);
-    }, 0);
-    const adr = roomsSold > 0 ? totalRevenue / roomsSold : 0;
-    const revpar = totalRooms > 0 ? totalRevenue / totalRooms : 0;
+      return sum.plus(amount.div(nights));
+    }, new Decimal(0));
+    const totalRevenue = totalRevenueDec.toNumber();
+    const adr = roomsSold > 0 ? totalRevenueDec.div(roomsSold).toNumber() : 0;
+    const revpar = totalRooms > 0 ? totalRevenueDec.div(totalRooms).toNumber() : 0;
 
     // Count today's new reservations and cancellations
     const reservationsToday = await this.db
@@ -103,7 +105,7 @@ export class ConnectInsightsService {
       roomsSold,
       reservationsToday: Number(reservationsToday[0]?.count ?? 0),
       cancellationsToday: Number(cancellationsToday[0]?.count ?? 0),
-      currentBarRate: barRate ? parseFloat(barRate.baseAmount) : 0,
+      currentBarRate: barRate ? new Decimal(barRate.baseAmount).toNumber() : 0,
       barRatePlanId: barRate?.id,
       suggestions,
     };

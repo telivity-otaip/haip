@@ -107,7 +107,7 @@ export class FolioService {
     if (folio.status !== 'open') {
       throw new BadRequestException('Folio is not open');
     }
-    if (Math.abs(parseFloat(folio.balance)) > 0.01) {
+    if (new Decimal(folio.balance).abs().gt('0.01')) {
       throw new BadRequestException(
         `Folio balance must be zero to settle (current: ${folio.balance})`,
       );
@@ -390,8 +390,8 @@ export class FolioService {
       throw new BadRequestException('Charge has already been reversed');
     }
 
-    const negatedAmount = (parseFloat(original.amount) * -1).toFixed(2);
-    const negatedTax = (parseFloat(original.taxAmount) * -1).toFixed(2);
+    const negatedAmount = new Decimal(original.amount).negated().toFixed(2);
+    const negatedTax = new Decimal(original.taxAmount).negated().toFixed(2);
 
     const [reversal] = await this.db
       .insert(charges)
@@ -440,7 +440,7 @@ export class FolioService {
           folioId,
           type: 'tax',
           description: `Reversal: ${taxCharge.description}`,
-          amount: (parseFloat(taxCharge.amount) * -1).toFixed(2),
+          amount: new Decimal(taxCharge.amount).negated().toFixed(2),
           currencyCode: taxCharge.currencyCode,
           taxAmount: '0',
           taxRate: taxCharge.taxRate,

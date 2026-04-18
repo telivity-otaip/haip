@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, sql, lte, gte } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import {
   charges,
   payments,
@@ -65,34 +66,47 @@ export class ReportsService {
       )
       .groupBy(payments.method);
 
-    // Build revenue object
-    const revenue = { room: 0, tax: 0, foodBeverage: 0, other: 0, total: 0 };
+    // Build revenue object — accumulate as Decimal, expose as number at boundary
+    const revenueDec = {
+      room: new Decimal(0),
+      tax: new Decimal(0),
+      foodBeverage: new Decimal(0),
+      other: new Decimal(0),
+      total: new Decimal(0),
+    };
     for (const row of revenueByType) {
-      const amount = parseFloat(row.total);
-      if (row.type === 'room') revenue.room += amount;
-      else if (row.type === 'tax') revenue.tax += amount;
-      else if (row.type === 'food_beverage') revenue.foodBeverage += amount;
-      else revenue.other += amount;
-      revenue.total += amount;
+      const amount = new Decimal(row.total);
+      if (row.type === 'room') revenueDec.room = revenueDec.room.plus(amount);
+      else if (row.type === 'tax') revenueDec.tax = revenueDec.tax.plus(amount);
+      else if (row.type === 'food_beverage') revenueDec.foodBeverage = revenueDec.foodBeverage.plus(amount);
+      else revenueDec.other = revenueDec.other.plus(amount);
+      revenueDec.total = revenueDec.total.plus(amount);
     }
+    const revenue = {
+      room: revenueDec.room.toNumber(),
+      tax: revenueDec.tax.toNumber(),
+      foodBeverage: revenueDec.foodBeverage.toNumber(),
+      other: revenueDec.other.toNumber(),
+      total: revenueDec.total.toNumber(),
+    };
 
     // Build payments object
     const paymentsObj: Record<string, number> = {};
-    let paymentsTotal = 0;
+    let paymentsTotalDec = new Decimal(0);
     for (const row of paymentsByMethod) {
-      const amount = parseFloat(row.total);
-      paymentsObj[row.method] = amount;
-      paymentsTotal += amount;
+      const amount = new Decimal(row.total);
+      paymentsObj[row.method] = amount.toNumber();
+      paymentsTotalDec = paymentsTotalDec.plus(amount);
     }
 
-    const adjustments = parseFloat(adjResult?.total ?? '0');
+    const adjustmentsDec = new Decimal(adjResult?.total ?? '0');
 
     return {
       date,
       revenue,
-      payments: { ...paymentsObj, total: paymentsTotal },
-      adjustments,
-      netRevenue: revenue.total - adjustments,
+      payments: { ...paymentsObj, total: paymentsTotalDec.toNumber() },
+      adjustments: adjustmentsDec.toNumber(),
+      netRevenue: revenueDec.total.minus(adjustmentsDec).toNumber(),
     };
   }
 
@@ -224,7 +238,8 @@ export class ReportsService {
           sql`${charges.serviceDate}::date = ${date}`,
         ),
       );
-    const roomRevenue = parseFloat(roomRevenueResult?.total ?? '0');
+    const roomRevenueDec = new Decimal(roomRevenueResult?.total ?? '0');
+    const roomRevenue = roomRevenueDec.toNumber();
 
     // Total revenue
     const [totalRevenueResult] = await this.db
@@ -239,7 +254,7 @@ export class ReportsService {
           sql`${charges.serviceDate}::date = ${date}`,
         ),
       );
-    const totalRevenue = parseFloat(totalRevenueResult?.total ?? '0');
+    const totalRevenue = new Decimal(totalRevenueResult?.total ?? '0').toNumber();
 
     // Revenue by type
     const revenueByTypeRows = await this.db
@@ -259,7 +274,7 @@ export class ReportsService {
 
     const revenueByType: Record<string, number> = {};
     for (const row of revenueByTypeRows) {
-      revenueByType[row.type] = parseFloat(row.total);
+      revenueByType[row.type] = new Decimal(row.total).toNumber();
     }
 
     // Payments by method
@@ -280,7 +295,7 @@ export class ReportsService {
 
     const paymentsByMethod: Record<string, number> = {};
     for (const row of paymentRows) {
-      paymentsByMethod[row.method] = parseFloat(row.total);
+      paymentsByMethod[row.method] = new Decimal(row.total).toNumber();
     }
 
     // Rooms sold
@@ -321,8 +336,11 @@ export class ReportsService {
 
     const availableRooms = totalRooms - unavailableRooms;
     const occupancyRate = availableRooms > 0 ? roomsSold / availableRooms : 0;
-    const adr = roomsSold > 0 ? roomRevenue / roomsSold : 0;
-    const revpar = adr * occupancyRate;
+    // ADR / RevPAR are displayed as currency — compute via Decimal to avoid drift
+    const adrDec = roomsSold > 0 ? roomRevenueDec.div(roomsSold) : new Decimal(0);
+    const revparDec = adrDec.times(occupancyRate);
+    const adr = adrDec.toNumber();
+    const revpar = revparDec.toNumber();
 
     // Outstanding balances
     const [outstandingResult] = await this.db
@@ -359,7 +377,7 @@ export class ReportsService {
       paymentsByMethod,
       outstandingBalances: {
         totalFoliosOpen: outstandingResult?.count ?? 0,
-        totalBalanceDue: parseFloat(outstandingResult?.totalBalance ?? '0'),
+        totalBalanceDue: new Decimal(outstandingResult?.totalBalance ?? '0').toNumber(),
       },
       auditStatus: {
         lastAuditDate: lastAudit?.businessDate ?? null,
@@ -439,7 +457,7 @@ export class ReportsService {
     const revenueMap = new Map<string, number>();
     for (const row of dailyRevenue) {
       const dateKey = typeof row.date === 'string' ? row.date : new Date(row.date).toISOString().split('T')[0]!;
-      revenueMap.set(dateKey, parseFloat(row.revenue));
+      revenueMap.set(dateKey, new Decimal(row.revenue).toNumber());
     }
 
     // Build daily array

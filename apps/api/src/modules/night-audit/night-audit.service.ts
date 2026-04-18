@@ -6,6 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { eq, and, sql, lte } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import {
   auditRuns,
   reservations,
@@ -134,8 +135,9 @@ export class NightAuditService {
         ),
       );
 
-    let totalRoom = 0;
-    let totalTax = 0;
+    // Monetary totals via Decimal to preserve precision
+    let totalRoom = new Decimal(0);
+    let totalTax = new Decimal(0);
     let count = 0;
     const errors: Array<{ message: string; entity?: string }> = [];
 
@@ -192,7 +194,7 @@ export class NightAuditService {
           rate = ratePlan.baseAmount;
         } else {
           // Fallback: total / nights
-          rate = (parseFloat(reservation.totalAmount) / reservation.nights).toFixed(2);
+          rate = new Decimal(reservation.totalAmount).div(reservation.nights).toFixed(2);
         }
 
         // Post room tariff — TaxService auto-posts tax charges via FolioService
@@ -206,13 +208,12 @@ export class NightAuditService {
           guestId: reservation.guestId,
         });
 
-        // Sum auto-posted tax charges
-        const taxAmount = (result.taxCharges ?? [])
-          .reduce((sum: number, tc: any) => sum + parseFloat(tc.amount), 0)
-          .toFixed(2);
+        // Sum auto-posted tax charges via Decimal
+        const taxAmountDec = (result.taxCharges ?? [])
+          .reduce((sum: Decimal, tc: any) => sum.plus(new Decimal(tc.amount)), new Decimal(0));
 
-        totalRoom += parseFloat(rate);
-        totalTax += parseFloat(taxAmount);
+        totalRoom = totalRoom.plus(new Decimal(rate));
+        totalTax = totalTax.plus(taxAmountDec);
         count++;
       } catch (err: any) {
         errors.push({
@@ -405,9 +406,12 @@ export class NightAuditService {
         ),
       );
 
-    const roomRevenue = parseFloat(revenueResult?.roomRevenue ?? '0');
-    const taxRevenue = parseFloat(revenueResult?.taxRevenue ?? '0');
-    const totalRevenue = parseFloat(revenueResult?.totalRevenue ?? '0');
+    const roomRevenueDec = new Decimal(revenueResult?.roomRevenue ?? '0');
+    const taxRevenueDec = new Decimal(revenueResult?.taxRevenue ?? '0');
+    const totalRevenueDec = new Decimal(revenueResult?.totalRevenue ?? '0');
+    const roomRevenue = roomRevenueDec.toNumber();
+    const taxRevenue = taxRevenueDec.toNumber();
+    const totalRevenue = totalRevenueDec.toNumber();
 
     // Rooms sold (in-house reservations)
     const [roomsSoldResult] = await this.db
@@ -440,8 +444,11 @@ export class NightAuditService {
 
     const availableRooms = totalRooms - unavailableRooms;
     const occupancyRate = availableRooms > 0 ? roomsSold / availableRooms : 0;
-    const adr = roomsSold > 0 ? roomRevenue / roomsSold : 0;
-    const revpar = adr * occupancyRate;
+    // ADR / RevPAR computed via Decimal since they are displayed as currency
+    const adrDec = roomsSold > 0 ? roomRevenueDec.div(roomsSold) : new Decimal(0);
+    const revparDec = adrDec.times(occupancyRate);
+    const adr = adrDec.toNumber();
+    const revpar = revparDec.toNumber();
 
     return {
       roomRevenue,

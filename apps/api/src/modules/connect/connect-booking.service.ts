@@ -1,5 +1,6 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import { bookings, reservations, guests, ratePlans, roomTypes, folios, rooms } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { AvailabilityService } from '../reservation/availability.service';
@@ -60,8 +61,11 @@ export class ConnectBookingService {
     const arrival = new Date(dto.checkIn);
     const departure = new Date(dto.checkOut);
     const nights = Math.ceil((departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24));
-    const baseAmount = parseFloat(ratePlan.baseAmount);
-    const totalAmount = baseAmount * nights;
+    // Monetary math via Decimal (baseAmount is a numeric string from PG)
+    const baseAmountDec = new Decimal(ratePlan.baseAmount);
+    const totalAmountDec = baseAmountDec.times(nights);
+    const baseAmount = baseAmountDec.toNumber();
+    const totalAmount = totalAmountDec.toNumber();
 
     // 5. Generate confirmation number
     const confirmationNumber = `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
@@ -91,7 +95,7 @@ export class ConnectBookingService {
         nights,
         roomTypeId: dto.roomTypeId,
         ratePlanId: dto.ratePlanId,
-        totalAmount: totalAmount.toString(),
+        totalAmount: totalAmountDec.toFixed(2),
         currencyCode: ratePlan.currencyCode,
         adults: dto.adults,
         children: dto.children ?? 0,
@@ -209,12 +213,12 @@ export class ConnectBookingService {
       checkIn: reservation.arrivalDate,
       checkOut: reservation.departureDate,
       roomType: roomType?.name ?? 'Unknown',
-      rateAmount: parseFloat(reservation.totalAmount),
+      rateAmount: new Decimal(reservation.totalAmount).toNumber(),
       currencyCode: reservation.currencyCode,
       roomAssigned: !!reservation.roomId,
       roomNumber,
       folioExists: !!folio,
-      folioBalance: folio ? parseFloat(folio.balance) : undefined,
+      folioBalance: folio ? new Decimal(folio.balance).toNumber() : undefined,
       lastModified: reservation.updatedAt?.toISOString() ?? reservation.createdAt.toISOString(),
       verifiedAt: new Date().toISOString(),
     };
@@ -247,8 +251,9 @@ export class ConnectBookingService {
     }
 
     const updateFields: Record<string, any> = { updatedAt: new Date() };
-    let costDifference = 0;
-    const previousAmount = parseFloat(reservation.totalAmount);
+    let costDifferenceDec = new Decimal(0);
+    const previousAmountDec = new Decimal(reservation.totalAmount);
+    const previousAmount = previousAmountDec.toNumber();
 
     // Handle guest detail updates
     if (dto.guestFirstName || dto.guestLastName) {
@@ -302,17 +307,17 @@ export class ConnectBookingService {
       const arrival = new Date(newCheckIn);
       const departure = new Date(newCheckOut);
       const nights = Math.ceil((departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24));
-      const newTotal = parseFloat(ratePlan.baseAmount) * nights;
+      const newTotalDec = new Decimal(ratePlan.baseAmount).times(nights);
 
       updateFields['arrivalDate'] = newCheckIn;
       updateFields['departureDate'] = newCheckOut;
       updateFields['nights'] = nights;
       updateFields['roomTypeId'] = newRoomTypeId;
       updateFields['ratePlanId'] = newRatePlanId;
-      updateFields['totalAmount'] = newTotal.toString();
+      updateFields['totalAmount'] = newTotalDec.toFixed(2);
       updateFields['currencyCode'] = ratePlan.currencyCode;
 
-      costDifference = newTotal - previousAmount;
+      costDifferenceDec = newTotalDec.minus(previousAmountDec);
     }
 
     // Apply update
@@ -336,9 +341,9 @@ export class ConnectBookingService {
       confirmationNumber,
       reservationId: reservation.id,
       status: updated.status,
-      previousAmount: Math.round(previousAmount * 100) / 100,
-      newAmount: Math.round(parseFloat(updated.totalAmount) * 100) / 100,
-      costDifference: Math.round(costDifference * 100) / 100,
+      previousAmount: Number(previousAmountDec.toFixed(2)),
+      newAmount: Number(new Decimal(updated.totalAmount).toFixed(2)),
+      costDifference: Number(costDifferenceDec.toFixed(2)),
       modifiedAt: new Date().toISOString(),
     };
   }
@@ -454,15 +459,16 @@ export class ConnectBookingService {
     taxRate: number,
   ) {
     const breakdown = [];
+    const baseAmountDec = new Decimal(baseAmount);
+    const taxPerNightDec = baseAmountDec.times(taxRate).div(100);
     for (let i = 0; i < nights; i++) {
       const date = new Date(arrival);
       date.setDate(date.getDate() + i);
       const dateStr = date.toISOString().split('T')[0]!;
-      const tax = baseAmount * (taxRate / 100);
       breakdown.push({
         date: dateStr,
-        rate: Math.round(baseAmount * 100) / 100,
-        tax: Math.round(tax * 100) / 100,
+        rate: Number(baseAmountDec.toFixed(2)),
+        tax: Number(taxPerNightDec.toFixed(2)),
       });
     }
     return breakdown;
@@ -476,7 +482,9 @@ export class ConnectBookingService {
   }
 
   private calculateCancellationPenalty(ratePlan: any, reservation: any) {
-    const totalAmount = parseFloat(reservation.totalAmount);
+    // Money math via Decimal; refundAmount / penaltyAmount are displayed as currency
+    const totalAmountDec = new Decimal(reservation.totalAmount);
+    const totalAmount = totalAmountDec.toNumber();
 
     // Non-refundable rate
     if (ratePlan?.type === 'promotional') {
@@ -504,11 +512,11 @@ export class ConnectBookingService {
 
     // First night penalty
     const nights = reservation.nights || 1;
-    const firstNightAmount = totalAmount / nights;
+    const firstNightAmountDec = totalAmountDec.div(nights);
     return {
       penaltyApplied: true,
-      penaltyAmount: Math.round(firstNightAmount * 100) / 100,
-      refundAmount: Math.round((totalAmount - firstNightAmount) * 100) / 100,
+      penaltyAmount: Number(firstNightAmountDec.toFixed(2)),
+      refundAmount: Number(totalAmountDec.minus(firstNightAmountDec).toFixed(2)),
       policyDescription: 'First night charge applies — cancelled within 24 hours of check-in.',
     };
   }
