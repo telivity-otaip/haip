@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './auth.guard';
 import { RolesGuard } from './roles.guard';
+import { WsAuthService } from './ws-auth.service';
 
 /**
  * Authentication & Authorization module.
@@ -46,6 +47,11 @@ import { RolesGuard } from './roles.guard';
     // Global guards — applied to ALL endpoints
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // WebSocket token verifier — used by gateways that cannot rely on
+    // passport HTTP guards (e.g. EventsGateway). Registered always; the
+    // gateway itself honours AUTH_ENABLED=false as a dev bypass.
+    WsAuthService,
   ],
+  exports: [WsAuthService],
 })
 export class AuthModule {}

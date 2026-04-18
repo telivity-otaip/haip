@@ -50,7 +50,12 @@ for methods called only internally, because future controllers may call them.
   lookups (that creates a confused-deputy bug — the attacker supplies the id,
   the server derives a matching propertyId, scoping becomes a no-op).
 - Exceptions — document the reason in a code comment when you deviate:
-  - `guests` table: cross-property by design (one person stays at multiple hotels)
+  - `guests` table: the ROW is cross-property by design (one person stays at
+    multiple hotels), but API access MUST verify a reservation link at the
+    requesting property — i.e. scope reads/updates/deletes by "has this guest
+    at least one reservation at `propertyId`?". Creation is the only exception
+    (walk-ins have no reservation yet); the linking reservation is created
+    immediately after.
   - `properties` table: the property IS the tenant
   - Connect API (`/api/v1/connect/*`): bearer-credential model via
     `confirmationNumber` — scoped by credential possession, not propertyId

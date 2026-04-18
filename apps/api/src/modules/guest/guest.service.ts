@@ -1,14 +1,50 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, ilike, or, and, sql } from 'drizzle-orm';
-import { guests } from '@haip/database';
+import { eq, ilike, or, and, sql, inArray } from 'drizzle-orm';
+import { guests, reservations } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { CreateGuestDto } from './dto/create-guest.dto';
 import { UpdateGuestDto } from './dto/update-guest.dto';
 import { SearchGuestsDto } from './dto/search-guests.dto';
 
+/**
+ * GuestService
+ *
+ * Multi-tenancy note: guests are cross-property by design (one person may stay
+ * at multiple hotels), but API access MUST verify a reservation link at the
+ * requesting property — otherwise staff at hotel A can read/modify guest PII
+ * belonging to hotel B's customers. Every read/update/delete is scoped by
+ * "has this guest at least one reservation at `propertyId`?".
+ *
+ * The one exception is `create()`: a brand-new walk-in has no reservation yet,
+ * so creation is NOT scoped by an existing link. The caller still passes its
+ * own `propertyId` for audit purposes. Callers that need "find existing guest
+ * by email before creating" should expose a dedicated lookup rather than
+ * searching unscoped.
+ */
 @Injectable()
 export class GuestService {
   constructor(@Inject(DRIZZLE) private readonly db: any) {}
+
+  /**
+   * Verify that a guest has at least one reservation at the given property.
+   * Throws NotFoundException if they don't — identical response to "no such
+   * guest" to avoid leaking cross-property existence.
+   */
+  private async assertGuestAtProperty(guestId: string, propertyId: string): Promise<void> {
+    const hasStayed = await this.db
+      .select({ id: reservations.id })
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.guestId, guestId),
+          eq(reservations.propertyId, propertyId),
+        ),
+      )
+      .limit(1);
+    if (!hasStayed.length) {
+      throw new NotFoundException(`Guest ${guestId} not found`);
+    }
+  }
 
   async create(dto: CreateGuestDto) {
     const values: Record<string, unknown> = { ...dto };
@@ -19,7 +55,8 @@ export class GuestService {
     return guest;
   }
 
-  async findById(id: string) {
+  async findById(id: string, propertyId: string) {
+    await this.assertGuestAtProperty(id, propertyId);
     const [guest] = await this.db
       .select()
       .from(guests)
@@ -30,7 +67,8 @@ export class GuestService {
     return guest;
   }
 
-  async update(id: string, dto: UpdateGuestDto) {
+  async update(id: string, propertyId: string, dto: UpdateGuestDto) {
+    await this.assertGuestAtProperty(id, propertyId);
     const values: Record<string, unknown> = { ...dto, updatedAt: new Date() };
     if (dto.isDnr === true && !dto.dnrReason) {
       // Keep existing reason if not provided
@@ -57,7 +95,8 @@ export class GuestService {
     return guest;
   }
 
-  async delete(id: string) {
+  async delete(id: string, propertyId: string) {
+    await this.assertGuestAtProperty(id, propertyId);
     const [guest] = await this.db
       .delete(guests)
       .where(eq(guests.id, id))
@@ -68,8 +107,18 @@ export class GuestService {
     return { deleted: true };
   }
 
-  async search(dto: SearchGuestsDto) {
-    const conditions: any[] = [];
+  async search(propertyId: string, dto: SearchGuestsDto) {
+    // Scope to guests with ≥1 reservation at this property.
+    // Subquery: distinct guest_id from reservations where property_id = $1.
+    const conditions: any[] = [
+      inArray(
+        guests.id,
+        this.db
+          .select({ guestId: reservations.guestId })
+          .from(reservations)
+          .where(eq(reservations.propertyId, propertyId)),
+      ),
+    ];
 
     if (dto.search) {
       const pattern = `%${dto.search}%`;
@@ -99,8 +148,7 @@ export class GuestService {
     const limit = dto.limit ?? 20;
     const offset = (page - 1) * limit;
 
-    const whereClause =
-      conditions.length > 0 ? and(...conditions) : undefined;
+    const whereClause = and(...conditions);
 
     const [data, countResult] = await Promise.all([
       this.db

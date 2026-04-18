@@ -5,3 +5,4 @@ export { Public } from './public.decorator';
 export { Roles } from './roles.decorator';
 export { CurrentUser } from './current-user.decorator';
 export type { AuthUser } from './current-user.decorator';
+export { WsAuthService } from './ws-auth.service';
