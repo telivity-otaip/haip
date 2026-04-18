@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import { folios, charges, payments } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { WebhookService } from '../webhook/webhook.service';
@@ -24,9 +25,10 @@ export class FolioService {
     private readonly taxService: TaxService,
   ) {}
 
-  async create(dto: CreateFolioDto) {
-    const folioNumber = await this.generateFolioNumber(dto.propertyId);
-    const [folio] = await this.db
+  async create(dto: CreateFolioDto, tx?: any) {
+    const db = tx ?? this.db;
+    const folioNumber = await this.generateFolioNumber(dto.propertyId, tx);
+    const [folio] = await db
       .insert(folios)
       .values({ ...dto, folioNumber })
       .returning();
@@ -40,8 +42,9 @@ export class FolioService {
     return folio;
   }
 
-  async findById(id: string, propertyId: string) {
-    const [folio] = await this.db
+  async findById(id: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const [folio] = await db
       .select()
       .from(folios)
       .where(and(eq(folios.id, id), eq(folios.propertyId, propertyId)));
@@ -163,52 +166,83 @@ export class FolioService {
   }
 
   async transferCharge(folioId: string, propertyId: string, dto: TransferChargeDto) {
-    const sourceFolio = await this.findById(folioId, propertyId);
-    if (sourceFolio.status !== 'open') {
-      throw new BadRequestException('Source folio is not open');
-    }
-    const targetFolio = await this.findById(dto.targetFolioId, propertyId);
-    if (targetFolio.status !== 'open') {
-      throw new BadRequestException('Target folio is not open');
-    }
+    // Bug 2: wrap charge move + both balance recalculations in a transaction,
+    // and SELECT ... FOR UPDATE both folio rows up-front so concurrent
+    // transfers/recalculations on the same folios are serialized.
+    return this.db.transaction(async (tx: any) => {
+      // Lock both folios (deterministic order by id to avoid deadlock)
+      const [firstId, secondId] = [folioId, dto.targetFolioId].sort();
 
-    const [charge] = await this.db
-      .select()
-      .from(charges)
-      .where(
-        and(
-          eq(charges.id, dto.chargeId),
-          eq(charges.folioId, folioId),
-          eq(charges.propertyId, propertyId),
-        ),
-      );
-    if (!charge) {
-      throw new NotFoundException(`Charge ${dto.chargeId} not found on folio ${folioId}`);
-    }
-    if (charge.isLocked) {
-      throw new BadRequestException('Cannot transfer a locked charge');
-    }
+      const [firstFolio] = await tx
+        .select()
+        .from(folios)
+        .where(and(eq(folios.id, firstId!), eq(folios.propertyId, propertyId)))
+        .for('update');
+      if (!firstFolio) {
+        throw new NotFoundException(`Folio ${firstId} not found`);
+      }
+      let secondFolio: any = firstFolio;
+      if (secondId && secondId !== firstId) {
+        const [row] = await tx
+          .select()
+          .from(folios)
+          .where(and(eq(folios.id, secondId), eq(folios.propertyId, propertyId)))
+          .for('update');
+        if (!row) {
+          throw new NotFoundException(`Folio ${secondId} not found`);
+        }
+        secondFolio = row;
+      }
 
-    await this.db
-      .update(charges)
-      .set({ folioId: dto.targetFolioId })
-      .where(eq(charges.id, dto.chargeId));
+      const sourceFolio = firstFolio.id === folioId ? firstFolio : secondFolio;
+      const targetFolio = firstFolio.id === dto.targetFolioId ? firstFolio : secondFolio;
 
-    await this.recalculateBalance(folioId, propertyId);
-    await this.recalculateBalance(dto.targetFolioId, propertyId);
+      if (sourceFolio.status !== 'open') {
+        throw new BadRequestException('Source folio is not open');
+      }
+      if (targetFolio.status !== 'open') {
+        throw new BadRequestException('Target folio is not open');
+      }
 
-    return { transferred: true };
+      const [charge] = await tx
+        .select()
+        .from(charges)
+        .where(
+          and(
+            eq(charges.id, dto.chargeId),
+            eq(charges.folioId, folioId),
+            eq(charges.propertyId, propertyId),
+          ),
+        );
+      if (!charge) {
+        throw new NotFoundException(`Charge ${dto.chargeId} not found on folio ${folioId}`);
+      }
+      if (charge.isLocked) {
+        throw new BadRequestException('Cannot transfer a locked charge');
+      }
+
+      await tx
+        .update(charges)
+        .set({ folioId: dto.targetFolioId })
+        .where(eq(charges.id, dto.chargeId));
+
+      await this.recalculateBalance(folioId, propertyId, tx);
+      await this.recalculateBalance(dto.targetFolioId, propertyId, tx);
+
+      return { transferred: true };
+    });
   }
 
-  async recalculateBalance(folioId: string, propertyId: string) {
-    const [chargeSum] = await this.db
+  async recalculateBalance(folioId: string, propertyId: string, tx?: any) {
+    const db = tx ?? this.db;
+    const [chargeSum] = await db
       .select({
         total: sql<string>`coalesce(sum(${charges.amount}::numeric + ${charges.taxAmount}::numeric), 0)`,
       })
       .from(charges)
       .where(and(eq(charges.folioId, folioId), eq(charges.propertyId, propertyId)));
 
-    const [paymentSum] = await this.db
+    const [paymentSum] = await db
       .select({
         total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)`,
       })
@@ -221,24 +255,27 @@ export class FolioService {
         ),
       );
 
-    const totalCharges = parseFloat(chargeSum?.total ?? '0').toFixed(2);
-    const totalPayments = parseFloat(paymentSum?.total ?? '0').toFixed(2);
-    const balance = (parseFloat(totalCharges) - parseFloat(totalPayments)).toFixed(2);
+    // Monetary math: operate on string representations via decimal.js to
+    // preserve precision (postgres numeric returns strings).
+    const totalCharges = new Decimal(chargeSum?.total ?? '0').toFixed(2);
+    const totalPayments = new Decimal(paymentSum?.total ?? '0').toFixed(2);
+    const balance = new Decimal(totalCharges).minus(new Decimal(totalPayments)).toFixed(2);
 
-    await this.db
+    await db
       .update(folios)
       .set({ totalCharges, totalPayments, balance, updatedAt: new Date() })
       .where(and(eq(folios.id, folioId), eq(folios.propertyId, propertyId)));
   }
 
-  async postCharge(folioId: string, dto: CreateChargeDto) {
-    const folio = await this.findById(folioId, dto.propertyId);
+  async postCharge(folioId: string, dto: CreateChargeDto, tx?: any) {
+    const db = tx ?? this.db;
+    const folio = await this.findById(folioId, dto.propertyId, tx);
     if (folio.status !== 'open') {
       throw new BadRequestException('Cannot post charge to a folio that is not open');
     }
 
     if (dto.isReversal && dto.originalChargeId) {
-      const [original] = await this.db
+      const [original] = await db
         .select()
         .from(charges)
         .where(
@@ -256,7 +293,7 @@ export class FolioService {
       }
     }
 
-    const [charge] = await this.db
+    const [charge] = await db
       .insert(charges)
       .values({
         propertyId: dto.propertyId,
@@ -287,7 +324,7 @@ export class FolioService {
       );
 
       for (const item of taxItems) {
-        const [taxCharge] = await this.db
+        const [taxCharge] = await db
           .insert(charges)
           .values({
             propertyId: dto.propertyId,
@@ -308,7 +345,7 @@ export class FolioService {
       }
     }
 
-    await this.recalculateBalance(folioId, dto.propertyId);
+    await this.recalculateBalance(folioId, dto.propertyId, tx);
 
     await this.webhookService.emit(
       'folio.charge_posted',
@@ -516,7 +553,8 @@ export class FolioService {
     });
   }
 
-  private async generateFolioNumber(propertyId: string): Promise<string> {
+  private async generateFolioNumber(propertyId: string, tx?: any): Promise<string> {
+    const db = tx ?? this.db;
     const now = new Date();
     const yy = String(now.getFullYear()).slice(2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -525,7 +563,7 @@ export class FolioService {
 
     // Use MAX to find the highest existing sequence for this prefix,
     // which is safe under concurrent inserts (unique constraint prevents duplicates)
-    const [result] = await this.db
+    const [result] = await db
       .select({
         maxNumber: sql<string>`max(${folios.folioNumber})`,
       })

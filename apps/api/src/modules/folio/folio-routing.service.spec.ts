@@ -46,7 +46,7 @@ const mockFolioService = {
 };
 
 function createMockDb(returnData: any[] = [mockReservation]) {
-  return {
+  const db: any = {
     select: vi.fn().mockImplementation(() => ({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
@@ -68,6 +68,8 @@ function createMockDb(returnData: any[] = [mockReservation]) {
     }),
     delete: vi.fn(),
   };
+  db.transaction = (cb: any) => cb(db);
+  return db;
 }
 
 describe('FolioRoutingService', () => {
@@ -213,6 +215,7 @@ describe('FolioRoutingService', () => {
           companyName: 'Acme Corp',
           paymentTermsDays: 'NET30',
         }),
+        expect.anything(), // Bug 3: now called inside db.transaction with tx
       );
       expect(result.transferredAmount).toBe('300.00');
       expect(result.cityLedgerFolioId).toBe('folio-cl-001');

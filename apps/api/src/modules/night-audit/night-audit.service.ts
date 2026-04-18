@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { eq, and, sql, lte } from 'drizzle-orm';
 import {
@@ -44,12 +45,21 @@ export class NightAuditService {
    * Idempotent — re-running for same date returns existing result.
    */
   async runAudit(dto: RunAuditDto): Promise<AuditRunResult> {
-    // 1. Idempotency check
-    const existing = await this.findCompletedAudit(dto.propertyId, dto.businessDate);
-    if (existing) return { alreadyRun: true, auditRun: existing };
-
-    // 2. Create audit run record (status: running)
-    const auditRun = await this.createAuditRun(dto.propertyId, dto.businessDate);
+    // Bug 4: concurrency-safe idempotency via unique (property_id, business_date).
+    // Attempt to insert; if the row already exists, classify by status:
+    //   completed -> ConflictException (already done)
+    //   running/pending -> return as active audit (alreadyRun: true)
+    const auditRun = await this.createOrGetAuditRun(dto.propertyId, dto.businessDate);
+    if (auditRun._preexisting) {
+      delete auditRun._preexisting;
+      if (auditRun.status === 'completed') {
+        throw new ConflictException(
+          `Night audit for ${dto.businessDate} already completed`,
+        );
+      }
+      // status === 'running' (pending equivalent) — treat as active audit
+      return { alreadyRun: true, auditRun };
+    }
 
     // 3. Emit audit.started webhook
     await this.webhookService.emit(
@@ -470,6 +480,46 @@ export class NightAuditService {
       })
       .returning();
     return auditRun;
+  }
+
+  /**
+   * Bug 4: concurrency-safe insert-or-get.
+   * Relies on the (property_id, business_date) unique index. If another
+   * process already inserted an audit run for this date, onConflictDoNothing
+   * returns zero rows; we then SELECT the existing row and tag it _preexisting.
+   */
+  async createOrGetAuditRun(propertyId: string, businessDate: string) {
+    const inserted = await this.db
+      .insert(auditRuns)
+      .values({
+        propertyId,
+        businessDate,
+        status: 'running',
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    if (inserted.length > 0) {
+      return inserted[0];
+    }
+
+    // Conflict — fetch the existing row
+    const [existing] = await this.db
+      .select()
+      .from(auditRuns)
+      .where(
+        and(
+          eq(auditRuns.propertyId, propertyId),
+          eq(auditRuns.businessDate, businessDate),
+        ),
+      );
+    if (!existing) {
+      // Extremely unlikely: conflict without a visible row. Surface clearly.
+      throw new ConflictException(
+        `Night audit row conflict for ${businessDate} but no existing row visible`,
+      );
+    }
+    return { ...existing, _preexisting: true };
   }
 
   async completeAuditRun(

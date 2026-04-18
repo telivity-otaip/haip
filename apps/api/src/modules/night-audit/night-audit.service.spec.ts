@@ -157,6 +157,10 @@ function createMockDb(overrides: {
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
         returning: vi.fn().mockResolvedValue(insertResult),
+        // Bug 4: createOrGetAuditRun uses .onConflictDoNothing().returning()
+        onConflictDoNothing: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue(insertResult),
+        }),
       }),
     }),
     update: vi.fn().mockReturnValue({
@@ -195,9 +199,36 @@ describe('NightAuditService', () => {
 
   // --- Idempotency ---
 
-  it('should return existing audit if already completed for date', async () => {
+  it('should throw ConflictException when audit already completed for date', async () => {
+    // Bug 4: insert conflicts (returns []), select returns the completed row.
     mockDb = createMockDb({
       selectResults: [[mockCompletedAudit]],
+      insertResult: [],
+    });
+    const module = await Test.createTestingModule({
+      providers: [
+        NightAuditService,
+        { provide: DRIZZLE, useValue: mockDb },
+        { provide: FolioService, useValue: mockFolioService },
+        { provide: ReservationService, useValue: mockReservationService },
+        { provide: HousekeepingService, useValue: mockHousekeepingService },
+        { provide: RoomStatusService, useValue: mockRoomStatusService },
+        { provide: WebhookService, useValue: mockWebhookService },
+      ],
+    }).compile();
+    service = module.get(NightAuditService);
+
+    const { ConflictException } = await import('@nestjs/common');
+    await expect(
+      service.runAudit({ propertyId: 'prop-001', businessDate: '2026-04-06' }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('should return existing running audit if already in progress', async () => {
+    // Bug 4: insert conflicts (returns []), select returns a still-running row.
+    mockDb = createMockDb({
+      selectResults: [[mockAuditRun]],
+      insertResult: [],
     });
     const module = await Test.createTestingModule({
       providers: [
@@ -214,7 +245,7 @@ describe('NightAuditService', () => {
 
     const result = await service.runAudit({ propertyId: 'prop-001', businessDate: '2026-04-06' });
     expect(result.alreadyRun).toBe(true);
-    expect(result.auditRun.status).toBe('completed');
+    expect(result.auditRun.status).toBe('running');
   });
 
   // --- Audit Run Creation ---
@@ -523,10 +554,10 @@ describe('NightAuditService', () => {
   // --- Webhooks ---
 
   it('should emit audit.started webhook when creating audit run', async () => {
-    // Full runAudit with no in-house reservations and no no-show candidates
+    // Full runAudit with no in-house reservations and no no-show candidates.
+    // Bug 4: createOrGetAuditRun inserts successfully (no select needed pre-run).
     const db = createMockDb({
       selectResults: [
-        [],          // findCompletedAudit: none
         [],          // postRoomTariffs: no in-house
         [],          // processNoShows: no candidates
         [{ settings: {} }],  // property for no-show
@@ -571,7 +602,7 @@ describe('NightAuditService', () => {
   it('should generate stayover tasks for next day during audit', async () => {
     const db = createMockDb({
       selectResults: [
-        [],          // findCompletedAudit
+        // Bug 4: insert path is onConflictDoNothing; no pre-run select.
         [],          // postRoomTariffs: no in-house
         [],          // processNoShows
         [{ settings: {} }],

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 import { folios, reservations, payments } from '@haip/database';
 import { DRIZZLE } from '../../database/database.module';
 import { FolioService } from './folio.service';
@@ -77,53 +78,70 @@ export class FolioRoutingService {
     dto: TransferCityLedgerDto,
   ) {
     const sourceFolio = await this.folioService.findById(folioId, propertyId);
-    const remainingBalance = parseFloat(sourceFolio.balance);
+    // Monetary compare on string representation via decimal.js (numeric-as-string).
+    const remainingBalance = new Decimal(sourceFolio.balance);
 
-    if (remainingBalance <= 0) {
+    if (remainingBalance.lte(0)) {
       return { message: 'No outstanding balance to transfer' };
     }
 
-    // Create city ledger folio
-    const cityLedgerFolio = await this.folioService.create({
-      propertyId,
-      guestId: sourceFolio.guestId,
-      type: 'city_ledger',
-      currencyCode: sourceFolio.currencyCode,
-      companyName: dto.companyName,
-      billingAddress: dto.billingAddress,
-      paymentTermsDays: dto.paymentTermsDays,
-    });
+    const amountStr = remainingBalance.toFixed(2);
 
-    // Record city_ledger payment on the source folio (zeroes out the guest folio)
-    await this.db
-      .insert(payments)
-      .values({
-        folioId,
-        propertyId,
-        method: 'city_ledger',
-        amount: remainingBalance.toFixed(2),
-        currencyCode: sourceFolio.currencyCode,
-        status: 'captured',
-        processedAt: new Date(),
-        notes: `Transferred to city ledger: ${dto.companyName}`,
-      });
+    // Bug 3: wrap all mutating steps in a single transaction so partial failure
+    // (e.g. CL folio created but payment insert fails) is impossible.
+    // Idempotency-by-transferId is out of scope for this PR.
+    const { cityLedgerFolio } = await this.db.transaction(async (tx: any) => {
+      // Create city ledger folio
+      const cityLedgerFolio = await this.folioService.create(
+        {
+          propertyId,
+          guestId: sourceFolio.guestId,
+          type: 'city_ledger',
+          currencyCode: sourceFolio.currencyCode,
+          companyName: dto.companyName,
+          billingAddress: dto.billingAddress,
+          paymentTermsDays: dto.paymentTermsDays,
+        },
+        tx,
+      );
 
-    await this.folioService.recalculateBalance(folioId, propertyId);
+      // Record city_ledger payment on the source folio (zeroes out the guest folio)
+      await tx
+        .insert(payments)
+        .values({
+          folioId,
+          propertyId,
+          method: 'city_ledger',
+          amount: amountStr,
+          currencyCode: sourceFolio.currencyCode,
+          status: 'captured',
+          processedAt: new Date(),
+          notes: `Transferred to city ledger: ${dto.companyName}`,
+        });
 
-    // Post matching charge on the city ledger folio
-    await this.folioService.postCharge(cityLedgerFolio.id, {
-      propertyId,
-      type: 'fee',
-      description: `Transfer from folio ${sourceFolio.folioNumber}`,
-      amount: remainingBalance.toFixed(2),
-      currencyCode: sourceFolio.currencyCode,
-      serviceDate: new Date().toISOString(),
+      await this.folioService.recalculateBalance(folioId, propertyId, tx);
+
+      // Post matching charge on the city ledger folio
+      await this.folioService.postCharge(
+        cityLedgerFolio.id,
+        {
+          propertyId,
+          type: 'fee',
+          description: `Transfer from folio ${sourceFolio.folioNumber}`,
+          amount: amountStr,
+          currencyCode: sourceFolio.currencyCode,
+          serviceDate: new Date().toISOString(),
+        },
+        tx,
+      );
+
+      return { cityLedgerFolio };
     });
 
     return {
       sourceFolioId: folioId,
       cityLedgerFolioId: cityLedgerFolio.id,
-      transferredAmount: remainingBalance.toFixed(2),
+      transferredAmount: amountStr,
     };
   }
 }

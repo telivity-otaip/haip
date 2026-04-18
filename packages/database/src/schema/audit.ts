@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, jsonb, date, boolean, numeric, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, jsonb, date, boolean, numeric, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
 import { properties } from './property.js';
 
 /**
@@ -36,7 +36,11 @@ export const auditRuns = pgTable('audit_runs', {
   completedAt: timestamp('completed_at', { withTimezone: true }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  // Bug 4: prevent concurrent night audit runs for the same property/date.
+  uniquePropertyDate: uniqueIndex('night_audit_runs_property_date_unique')
+    .on(table.propertyId, table.businessDate),
+}));
 
 /**
  * Audit Log — GDPR audit trail for all data access and modifications.
