@@ -131,11 +131,16 @@ export class AriService {
       const restrictionItems: RestrictionPushParams['items'] = [];
 
       for (const rateMapping of ratePlanMapping) {
-        // Get rate plan details
+        // Get rate plan details — scoped to the connection's property
         const [ratePlan] = await this.db
           .select()
           .from(ratePlans)
-          .where(eq(ratePlans.id, rateMapping.ratePlanId));
+          .where(
+            and(
+              eq(ratePlans.id, rateMapping.ratePlanId),
+              eq(ratePlans.propertyId, propertyId),
+            ),
+          );
 
         if (!ratePlan) continue;
 

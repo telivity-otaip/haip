@@ -135,7 +135,7 @@ export class RateParityService {
     const [plan] = await this.db
       .select()
       .from(ratePlans)
-      .where(eq(ratePlans.id, ratePlanId));
+      .where(and(eq(ratePlans.id, ratePlanId), eq(ratePlans.propertyId, propertyId)));
 
     if (!plan) {
       return { baseAmount: 0, effectiveRate: 0, hasOverride: false };
@@ -144,7 +144,12 @@ export class RateParityService {
     const [conn] = await this.db
       .select()
       .from(channelConnections)
-      .where(eq(channelConnections.id, channelConnectionId));
+      .where(
+        and(
+          eq(channelConnections.id, channelConnectionId),
+          eq(channelConnections.propertyId, propertyId),
+        ),
+      );
 
     if (!conn) {
       return { baseAmount: parseFloat(plan.baseAmount), effectiveRate: parseFloat(plan.baseAmount), hasOverride: false };

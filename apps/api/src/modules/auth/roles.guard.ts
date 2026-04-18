@@ -25,9 +25,10 @@ export class RolesGuard implements CanActivate {
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
-    // If auth is disabled, skip role checks
-    const authEnabled = this.configService.get<string>('AUTH_ENABLED', 'false');
-    if (authEnabled !== 'true') {
+    // Secure-by-default: role checks are ON unless AUTH_ENABLED is explicitly 'false'.
+    // Matches JwtAuthGuard's default-on behavior.
+    const authEnabled = this.configService.get<string>('AUTH_ENABLED', 'true');
+    if (authEnabled === 'false') {
       return true;
     }
 

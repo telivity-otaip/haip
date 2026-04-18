@@ -136,14 +136,14 @@ describe('ReservationService — checkOut', () => {
   it('should transition state to checked_out', async () => {
     const db = createCheckOutDb();
     const svc = await createService(db);
-    const result = await svc.checkOut('res-001');
+    const result = await svc.checkOut('res-001', 'prop-001');
     expect(result.reservation.status).toBe('checked_out');
   });
 
   it('should set checkedOutAt and actualDepartureTime', async () => {
     const db = createCheckOutDb();
     const svc = await createService(db);
-    const result = await svc.checkOut('res-001');
+    const result = await svc.checkOut('res-001', 'prop-001');
     expect(result.reservation.checkedOutAt).toBeDefined();
     expect(result.reservation.actualDepartureTime).toBeDefined();
   });
@@ -151,7 +151,7 @@ describe('ReservationService — checkOut', () => {
   it('should mark room vacant_dirty', async () => {
     const db = createCheckOutDb();
     const svc = await createService(db);
-    await svc.checkOut('res-001');
+    await svc.checkOut('res-001', 'prop-001');
     expect(mockRoomStatusService.markVacantDirty).toHaveBeenCalledWith('room-001', 'prop-001');
   });
 
@@ -160,7 +160,7 @@ describe('ReservationService — checkOut', () => {
     const notLateProperty = { ...mockProperty, checkOutTime: '23:59' };
     const db = createCheckOutDb({ property: notLateProperty });
     const svc = await createService(db);
-    await svc.checkOut('res-001');
+    await svc.checkOut('res-001', 'prop-001');
     expect(mockWebhookService.emit).toHaveBeenCalledWith(
       'reservation.checked_out',
       'reservation',
@@ -174,14 +174,14 @@ describe('ReservationService — checkOut', () => {
     const authPayment = { id: 'pay-auth-001', folioId: 'folio-001', status: 'authorized', propertyId: 'prop-001' };
     const db = createCheckOutDb({ authorizedPayments: [authPayment] });
     const svc = await createService(db);
-    await svc.checkOut('res-001', { expressCheckout: true });
+    await svc.checkOut('res-001', 'prop-001', { expressCheckout: true });
     expect(mockPaymentService.capturePayment).toHaveBeenCalledWith('pay-auth-001', 'prop-001');
   });
 
   it('should settle zero-balance folios on express checkout', async () => {
     const db = createCheckOutDb();
     const svc = await createService(db);
-    await svc.checkOut('res-001', { expressCheckout: true });
+    await svc.checkOut('res-001', 'prop-001', { expressCheckout: true });
     expect(mockFolioService.settle).toHaveBeenCalledWith('folio-001', 'prop-001');
   });
 
@@ -190,7 +190,7 @@ describe('ReservationService — checkOut', () => {
     const db = createCheckOutDb();
     const svc = await createService(db);
     await expect(
-      svc.checkOut('res-001', { expressCheckout: true }),
+      svc.checkOut('res-001', 'prop-001', { expressCheckout: true }),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -199,7 +199,7 @@ describe('ReservationService — checkOut', () => {
     const lateProperty = { ...mockProperty, checkOutTime: '00:01' };
     const db = createCheckOutDb({ property: lateProperty });
     const svc = await createService(db);
-    const result = await svc.checkOut('res-001');
+    const result = await svc.checkOut('res-001', 'prop-001');
     const updateCall = db.update.mock.results[0].value.set.mock.calls[0][0];
     expect(updateCall.isLateCheckout).toBe(true);
   });
@@ -208,7 +208,7 @@ describe('ReservationService — checkOut', () => {
     const lateProperty = { ...mockProperty, checkOutTime: '00:01', settings: { lateCheckoutFee: 75 } };
     const db = createCheckOutDb({ property: lateProperty });
     const svc = await createService(db);
-    await svc.checkOut('res-001');
+    await svc.checkOut('res-001', 'prop-001');
     expect(mockFolioService.postCharge).toHaveBeenCalledWith(
       'folio-001',
       expect.objectContaining({
@@ -223,7 +223,7 @@ describe('ReservationService — checkOut', () => {
     const authPayment = { id: 'pay-auth-001', folioId: 'folio-001', status: 'authorized', propertyId: 'prop-001' };
     const db = createCheckOutDb({ authorizedPayments: [authPayment] });
     const svc = await createService(db);
-    await svc.checkOut('res-001');
+    await svc.checkOut('res-001', 'prop-001');
     expect(mockPaymentService.voidPayment).toHaveBeenCalledWith('pay-auth-001', 'prop-001');
   });
 
@@ -233,7 +233,7 @@ describe('ReservationService — checkOut', () => {
     });
     const db = createCheckOutDb();
     const svc = await createService(db);
-    const result = await svc.checkOut('res-001');
+    const result = await svc.checkOut('res-001', 'prop-001');
     expect(result.folioSummary).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ folioId: 'folio-001', balance: '150.00' }),
@@ -245,7 +245,7 @@ describe('ReservationService — checkOut', () => {
     const stayoverRes = { ...mockReservation, status: 'stayover' };
     const db = createCheckOutDb({ reservation: stayoverRes });
     const svc = await createService(db);
-    const result = await svc.checkOut('res-001');
+    const result = await svc.checkOut('res-001', 'prop-001');
     expect(result.reservation.status).toBe('checked_out');
   });
 });

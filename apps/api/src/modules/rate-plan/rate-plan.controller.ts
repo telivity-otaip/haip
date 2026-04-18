@@ -40,38 +40,52 @@ export class RatePlanController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get rate plan by ID' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Rate plan found' })
   @ApiResponse({ status: 404, description: 'Rate plan not found' })
-  getRatePlanById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.ratePlanService.findById(id);
+  getRatePlanById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.ratePlanService.findById(id, propertyId);
   }
 
   @Get(':id/effective-rate')
   @ApiOperation({ summary: 'Calculate effective rate (resolves derived rate chain)' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Effective rate calculated' })
-  getEffectiveRate(@Param('id', ParseUUIDPipe) id: string) {
-    return this.ratePlanService.calculateDerivedRate(id);
+  getEffectiveRate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.ratePlanService.calculateDerivedRate(id, propertyId);
   }
 
   @Patch(':id')
   @Roles('admin')
   @ApiOperation({ summary: 'Update rate plan' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Rate plan updated' })
   @ApiResponse({ status: 404, description: 'Rate plan not found' })
   updateRatePlan(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateRatePlanDto,
   ) {
-    return this.ratePlanService.update(id, dto);
+    return this.ratePlanService.update(id, propertyId, dto);
   }
 
   // --- Restrictions sub-resource ---
 
   @Get(':id/restrictions')
   @ApiOperation({ summary: 'Get restrictions for a rate plan' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'List of restrictions' })
-  getRestrictions(@Param('id', ParseUUIDPipe) id: string) {
-    return this.ratePlanService.findRestrictions(id);
+  getRestrictions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.ratePlanService.findRestrictions(id, propertyId);
   }
 
   @Post(':id/restrictions')
@@ -82,31 +96,35 @@ export class RatePlanController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateRateRestrictionDto,
   ) {
-    return this.ratePlanService.createRestriction(id, dto);
+    return this.ratePlanService.createRestriction(id, dto.propertyId, dto);
   }
 
   @Patch(':id/restrictions/:restrictionId')
   @Roles('admin')
   @ApiOperation({ summary: 'Update a rate restriction' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Restriction updated' })
   @ApiResponse({ status: 404, description: 'Restriction not found' })
   updateRestriction(
     @Param('id', ParseUUIDPipe) _id: string,
     @Param('restrictionId', ParseUUIDPipe) restrictionId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: UpdateRateRestrictionDto,
   ) {
-    return this.ratePlanService.updateRestriction(restrictionId, dto);
+    return this.ratePlanService.updateRestriction(restrictionId, propertyId, dto);
   }
 
   @Delete(':id/restrictions/:restrictionId')
   @Roles('admin')
   @ApiOperation({ summary: 'Delete a rate restriction' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Restriction deleted' })
   @ApiResponse({ status: 404, description: 'Restriction not found' })
   deleteRestriction(
     @Param('id', ParseUUIDPipe) _id: string,
     @Param('restrictionId', ParseUUIDPipe) restrictionId: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
   ) {
-    return this.ratePlanService.deleteRestriction(restrictionId);
+    return this.ratePlanService.deleteRestriction(restrictionId, propertyId);
   }
 }

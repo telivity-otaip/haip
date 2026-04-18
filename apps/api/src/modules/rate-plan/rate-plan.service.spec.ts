@@ -59,7 +59,7 @@ describe('RatePlanService', () => {
       }).compile();
       const service = module.get<RatePlanService>(RatePlanService);
 
-      const result = await service.calculateDerivedRate('rp-bar-001');
+      const result = await service.calculateDerivedRate('rp-bar-001', 'prop-001');
       expect(result.effectiveRate).toBe(200);
       expect(result.currency).toBe('USD');
     });
@@ -91,7 +91,7 @@ describe('RatePlanService', () => {
       }).compile();
       const service = module.get<RatePlanService>(RatePlanService);
 
-      const result = await service.calculateDerivedRate('rp-aaa-001');
+      const result = await service.calculateDerivedRate('rp-aaa-001', 'prop-001');
       // 200 * (1 + (-10/100)) = 200 * 0.9 = 180
       expect(result.effectiveRate).toBe(180);
       expect(result.currency).toBe('USD');
@@ -129,7 +129,7 @@ describe('RatePlanService', () => {
       }).compile();
       const service = module.get<RatePlanService>(RatePlanService);
 
-      const result = await service.calculateDerivedRate('rp-fixed-001');
+      const result = await service.calculateDerivedRate('rp-fixed-001', 'prop-001');
       // 200 + (-25) = 175
       expect(result.effectiveRate).toBe(175);
     });
@@ -166,7 +166,7 @@ describe('RatePlanService', () => {
       }).compile();
       const service = module.get<RatePlanService>(RatePlanService);
 
-      const result = await service.calculateDerivedRate('rp-big-001');
+      const result = await service.calculateDerivedRate('rp-big-001', 'prop-001');
       expect(result.effectiveRate).toBe(0);
     });
   });

@@ -60,7 +60,7 @@ export class ReservationController {
   // --- CRUD routes ---
 
   @Get()
-  @ApiOperation({ summary: 'List reservations with filters' })
+  @ApiOperation({ summary: 'List reservations with filters (propertyId required)' })
   @ApiResponse({ status: 200, description: 'Paginated list of reservations' })
   listReservations(@Query() dto: ListReservationsDto) {
     return this.reservationService.list(dto);
@@ -76,22 +76,28 @@ export class ReservationController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get reservation with guest, room, and rate details' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation found' })
   @ApiResponse({ status: 404, description: 'Reservation not found' })
-  getReservationById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.reservationService.findById(id);
+  getReservationById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.reservationService.findById(id, propertyId);
   }
 
   @Patch(':id')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Modify reservation (dates, room type, rate, occupancy)' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation modified' })
   @ApiResponse({ status: 404, description: 'Reservation not found' })
   modifyReservation(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: ModifyReservationDto,
   ) {
-    return this.reservationService.modify(id, dto);
+    return this.reservationService.modify(id, propertyId, dto);
   }
 
   // --- Lifecycle transition routes ---
@@ -99,68 +105,88 @@ export class ReservationController {
   @Patch(':id/confirm')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Confirm reservation' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation confirmed' })
-  confirmReservation(@Param('id', ParseUUIDPipe) id: string) {
-    return this.reservationService.confirm(id);
+  confirmReservation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.reservationService.confirm(id, propertyId);
   }
 
   @Patch(':id/assign-room')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Assign specific room to reservation' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Room assigned' })
   assignRoom(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: AssignRoomDto,
   ) {
-    return this.reservationService.assignRoom(id, dto);
+    return this.reservationService.assignRoom(id, propertyId, dto);
   }
 
   @Patch(':id/cancel')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Cancel reservation with optional reason' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation cancelled' })
   cancelReservation(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CancelReservationDto,
   ) {
-    return this.reservationService.cancel(id, dto);
+    return this.reservationService.cancel(id, propertyId, dto);
   }
 
   @Patch(':id/no-show')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Mark reservation as no-show' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Reservation marked as no-show' })
-  markNoShow(@Param('id', ParseUUIDPipe) id: string) {
-    return this.reservationService.markNoShow(id);
+  markNoShow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.reservationService.markNoShow(id, propertyId);
   }
 
   @Patch(':id/check-in')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Check in reservation with optional ID capture, deposit auth, room override' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Guest checked in' })
   checkIn(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CheckInDto,
   ) {
-    return this.reservationService.checkIn(id, dto);
+    return this.reservationService.checkIn(id, propertyId, dto);
   }
 
   @Patch(':id/check-out')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Check out reservation with optional express checkout and late fee' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Guest checked out' })
   checkOut(
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
     @Body() dto: CheckOutDto,
   ) {
-    return this.reservationService.checkOut(id, dto);
+    return this.reservationService.checkOut(id, propertyId, dto);
   }
 
   @Post(':id/express-checkout')
   @Roles('admin', 'front_desk')
   @ApiOperation({ summary: 'Express checkout — auto-capture deposits and settle' })
+  @ApiQuery({ name: 'propertyId', required: true })
   @ApiResponse({ status: 200, description: 'Express checkout completed' })
-  expressCheckOut(@Param('id', ParseUUIDPipe) id: string) {
-    return this.reservationService.expressCheckOut(id);
+  expressCheckOut(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('propertyId', ParseUUIDPipe) propertyId: string,
+  ) {
+    return this.reservationService.expressCheckOut(id, propertyId);
   }
 }

@@ -61,25 +61,29 @@ export class ReservationService {
       throw new BadRequestException('Departure date must be after arrival date');
     }
 
-    // Check inventory availability
-    const availability = await this.availabilityService.searchAvailability(
-      dto.propertyId,
-      dto.arrivalDate,
-      dto.departureDate,
-      dto.roomTypeId,
-    );
-    const roomTypeAvail = availability.find((a: any) => a.roomTypeId === dto.roomTypeId);
-    if (!roomTypeAvail || roomTypeAvail.available <= 0) {
-      throw new BadRequestException(
-        `No availability for room type ${dto.roomTypeId} on the requested dates`,
-      );
-    }
-
     // Generate confirmation number
     const confirmationNumber = `HAIP-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 4).toUpperCase()}`;
 
-    // Create booking + reservation in a transaction
+    // TOCTOU: availability check + insert run inside the same transaction so the
+    // race window between "there's space" and "we wrote the booking" is minimized.
+    // Postgres default isolation is READ COMMITTED, so concurrent txs can still
+    // double-book in theory; for stronger guarantees promote to SERIALIZABLE.
+    // See Bug 5 — kept at default to avoid driver-compat surprises.
     const result = await this.db.transaction(async (tx: any) => {
+      // Check inventory availability inside the tx
+      const availability = await this.availabilityService.searchAvailability(
+        dto.propertyId,
+        dto.arrivalDate,
+        dto.departureDate,
+        dto.roomTypeId,
+      );
+      const roomTypeAvail = availability.find((a: any) => a.roomTypeId === dto.roomTypeId);
+      if (!roomTypeAvail || roomTypeAvail.available <= 0) {
+        throw new BadRequestException(
+          `No availability for room type ${dto.roomTypeId} on the requested dates`,
+        );
+      }
+
       const [booking] = await tx
         .insert(bookings)
         .values({
@@ -132,20 +136,22 @@ export class ReservationService {
     return result;
   }
 
-  async confirm(id: string) {
-    const reservation = await this.findByIdRaw(id);
+  async confirm(id: string, propertyId: string) {
+    const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'confirmed');
 
     const [updated] = await this.db
       .update(reservations)
       .set({ status: 'confirmed', updatedAt: new Date() })
-      .where(eq(reservations.id, id))
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      )
       .returning();
     return updated;
   }
 
-  async assignRoom(id: string, dto: AssignRoomDto) {
-    const reservation = await this.findByIdRaw(id);
+  async assignRoom(id: string, propertyId: string, dto: AssignRoomDto) {
+    const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'assigned');
 
     // Verify room exists, belongs to same property, and matches room type
@@ -172,13 +178,15 @@ export class ReservationService {
     const [updated] = await this.db
       .update(reservations)
       .set({ roomId: dto.roomId, status: 'assigned', updatedAt: new Date() })
-      .where(eq(reservations.id, id))
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      )
       .returning();
     return updated;
   }
 
-  async cancel(id: string, dto: CancelReservationDto) {
-    const reservation = await this.findByIdRaw(id);
+  async cancel(id: string, propertyId: string, dto: CancelReservationDto) {
+    const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'cancelled');
 
     const [updated] = await this.db
@@ -189,7 +197,9 @@ export class ReservationService {
         cancellationReason: dto.cancellationReason,
         updatedAt: new Date(),
       })
-      .where(eq(reservations.id, id))
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      )
       .returning();
 
     // Emit reservation.cancelled so channel manager / ARI can push updated availability.
@@ -210,20 +220,22 @@ export class ReservationService {
     return updated;
   }
 
-  async markNoShow(id: string) {
-    const reservation = await this.findByIdRaw(id);
+  async markNoShow(id: string, propertyId: string) {
+    const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'no_show');
 
     const [updated] = await this.db
       .update(reservations)
       .set({ status: 'no_show', updatedAt: new Date() })
-      .where(eq(reservations.id, id))
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      )
       .returning();
     return updated;
   }
 
-  async checkIn(id: string, dto: CheckInDto = {}) {
-    const reservation = await this.findByIdRaw(id);
+  async checkIn(id: string, propertyId: string, dto: CheckInDto = {}) {
+    const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'checked_in');
 
     // DNR check
@@ -327,7 +339,9 @@ export class ReservationService {
     const [updated] = await this.db
       .update(reservations)
       .set(updateData)
-      .where(eq(reservations.id, id))
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      )
       .returning();
 
     // Auto-create guest folio on check-in
@@ -384,8 +398,8 @@ export class ReservationService {
     return { reservation: updated, folio, depositAuth };
   }
 
-  async checkOut(id: string, dto: CheckOutDto = {}) {
-    const reservation = await this.findByIdRaw(id);
+  async checkOut(id: string, propertyId: string, dto: CheckOutDto = {}) {
+    const reservation = await this.findByIdRaw(id, propertyId);
     assertTransition(reservation.status as ReservationStatus, 'checked_out');
 
     const now = new Date();
@@ -539,7 +553,9 @@ export class ReservationService {
     const [updated] = await this.db
       .update(reservations)
       .set(updateData)
-      .where(eq(reservations.id, id))
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      )
       .returning();
 
     // Emit webhook
@@ -554,8 +570,8 @@ export class ReservationService {
     return { reservation: updated, folioSummary };
   }
 
-  async expressCheckOut(id: string) {
-    return this.checkOut(id, { expressCheckout: true });
+  async expressCheckOut(id: string, propertyId: string) {
+    return this.checkOut(id, propertyId, { expressCheckout: true });
   }
 
   async groupCheckIn(propertyId: string, dto: GroupCheckInDto) {
@@ -566,9 +582,18 @@ export class ReservationService {
       error?: string;
     }> = [];
 
-    // Validate all reservations belong to the same property
+    // Validate all reservations belong to the same property.
+    // findByIdRaw is scoped by propertyId, and we also double-check the returned
+    // row's propertyId defensively for a clearer error message.
     for (const item of dto.reservations) {
-      const reservation = await this.findByIdRaw(item.reservationId);
+      let reservation: any;
+      try {
+        reservation = await this.findByIdRaw(item.reservationId, propertyId);
+      } catch {
+        throw new BadRequestException(
+          `Reservation ${item.reservationId} does not belong to property ${propertyId}`,
+        );
+      }
       if (reservation.propertyId !== propertyId) {
         throw new BadRequestException(
           `Reservation ${item.reservationId} does not belong to property ${propertyId}`,
@@ -579,7 +604,7 @@ export class ReservationService {
     // Process each check-in individually
     for (const item of dto.reservations) {
       try {
-        const result = await this.checkIn(item.reservationId, {
+        const result = await this.checkIn(item.reservationId, propertyId, {
           roomId: item.roomId,
           skipDepositAuth: item.skipDepositAuth,
         });
@@ -601,8 +626,8 @@ export class ReservationService {
     };
   }
 
-  async modify(id: string, dto: ModifyReservationDto) {
-    const reservation = await this.findByIdRaw(id);
+  async modify(id: string, propertyId: string, dto: ModifyReservationDto) {
+    const reservation = await this.findByIdRaw(id, propertyId);
 
     // Can only modify before check-out
     const nonModifiable: ReservationStatus[] = ['checked_out', 'no_show', 'cancelled'];
@@ -644,48 +669,59 @@ export class ReservationService {
     // If dates or room type change, re-check availability on the new window.
     // The existing reservation still occupies its old window (and room type) in searchAvailability,
     // so if roomType is unchanged we must exclude it from the count to avoid blocking itself on overlap.
-    if (arrivalChanged || departureChanged || roomTypeChanged) {
-      const newArrival = (dto.arrivalDate ?? reservation.arrivalDate) as string;
-      const newDeparture = (dto.departureDate ?? reservation.departureDate) as string;
-      const newRoomTypeId = (dto.roomTypeId ?? reservation.roomTypeId) as string;
+    //
+    // TOCTOU: we run the availability check and the update inside the same transaction
+    // so concurrent writers cannot slip between them. Postgres' default isolation
+    // (READ COMMITTED) still permits some overlap, but the race window is minimized.
+    // For stricter guarantees, raise the transaction to SERIALIZABLE — not done here
+    // to avoid breakage with drizzle-orm's postgres-js driver; see Bug 5.
+    const updated = await this.db.transaction(async (tx: any) => {
+      if (arrivalChanged || departureChanged || roomTypeChanged) {
+        const newArrival = (dto.arrivalDate ?? reservation.arrivalDate) as string;
+        const newDeparture = (dto.departureDate ?? reservation.departureDate) as string;
+        const newRoomTypeId = (dto.roomTypeId ?? reservation.roomTypeId) as string;
 
-      const availability = await this.availabilityService.searchAvailability(
-        reservation.propertyId,
-        newArrival,
-        newDeparture,
-        newRoomTypeId,
-      );
-
-      // Check each night in the requested window has availability.
-      // If the reservation currently occupies the same room type and overlaps the new window,
-      // it was counted as "sold" — give it back one unit when evaluating.
-      const currentCountsItself = !roomTypeChanged &&
-        reservation.arrivalDate < newDeparture &&
-        reservation.departureDate > newArrival;
-
-      const nightsOk = availability
-        .filter((a: any) => a.roomTypeId === newRoomTypeId)
-        .every((a: any) => {
-          const existingOccupiesThisNight =
-            currentCountsItself &&
-            (reservation.arrivalDate as string) <= a.date &&
-            (reservation.departureDate as string) > a.date;
-          const effectiveAvailable = a.available + (existingOccupiesThisNight ? 1 : 0);
-          return effectiveAvailable > 0;
-        });
-
-      if (!nightsOk) {
-        throw new ConflictException(
-          `No availability for room type ${newRoomTypeId} on ${newArrival} → ${newDeparture}`,
+        const availability = await this.availabilityService.searchAvailability(
+          reservation.propertyId,
+          newArrival,
+          newDeparture,
+          newRoomTypeId,
         );
-      }
-    }
 
-    const [updated] = await this.db
-      .update(reservations)
-      .set(updates)
-      .where(eq(reservations.id, id))
-      .returning();
+        // Check each night in the requested window has availability.
+        // If the reservation currently occupies the same room type and overlaps the new window,
+        // it was counted as "sold" — give it back one unit when evaluating.
+        const currentCountsItself = !roomTypeChanged &&
+          reservation.arrivalDate < newDeparture &&
+          reservation.departureDate > newArrival;
+
+        const nightsOk = availability
+          .filter((a: any) => a.roomTypeId === newRoomTypeId)
+          .every((a: any) => {
+            const existingOccupiesThisNight =
+              currentCountsItself &&
+              (reservation.arrivalDate as string) <= a.date &&
+              (reservation.departureDate as string) > a.date;
+            const effectiveAvailable = a.available + (existingOccupiesThisNight ? 1 : 0);
+            return effectiveAvailable > 0;
+          });
+
+        if (!nightsOk) {
+          throw new ConflictException(
+            `No availability for room type ${newRoomTypeId} on ${newArrival} → ${newDeparture}`,
+          );
+        }
+      }
+
+      const [row] = await tx
+        .update(reservations)
+        .set(updates)
+        .where(
+          and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+        )
+        .returning();
+      return row;
+    });
 
     // Emit reservation.modified so channel manager / ARI can push updated availability.
     await this.webhookService.emit(
@@ -707,8 +743,9 @@ export class ReservationService {
     return updated;
   }
 
-  async findById(id: string) {
-    // Join with guest, room type, rate plan, and room (if assigned)
+  async findById(id: string, propertyId: string) {
+    // Join with guest, room type, rate plan, and room (if assigned).
+    // Tenant-scoped via propertyId to prevent cross-tenant access.
     const results = await this.db
       .select({
         reservation: reservations,
@@ -722,7 +759,9 @@ export class ReservationService {
       .leftJoin(roomTypes, eq(reservations.roomTypeId, roomTypes.id))
       .leftJoin(ratePlans, eq(reservations.ratePlanId, ratePlans.id))
       .leftJoin(rooms, eq(reservations.roomId, rooms.id))
-      .where(eq(reservations.id, id));
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      );
 
     if (!results.length) {
       throw new NotFoundException(`Reservation ${id} not found`);
@@ -732,11 +771,9 @@ export class ReservationService {
   }
 
   async list(dto: ListReservationsDto) {
-    const conditions: any[] = [];
+    // propertyId is required by the DTO — always tenant-scope.
+    const conditions: any[] = [eq(reservations.propertyId, dto.propertyId)];
 
-    if (dto.propertyId) {
-      conditions.push(eq(reservations.propertyId, dto.propertyId));
-    }
     if (dto.status) {
       conditions.push(eq(reservations.status, dto.status as any));
     }
@@ -804,11 +841,13 @@ export class ReservationService {
     };
   }
 
-  private async findByIdRaw(id: string) {
+  private async findByIdRaw(id: string, propertyId: string) {
     const [reservation] = await this.db
       .select()
       .from(reservations)
-      .where(eq(reservations.id, id));
+      .where(
+        and(eq(reservations.id, id), eq(reservations.propertyId, propertyId)),
+      );
     if (!reservation) {
       throw new NotFoundException(`Reservation ${id} not found`);
     }

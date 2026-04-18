@@ -249,7 +249,7 @@ export class NightAuditService {
     for (const reservation of noShowCandidates) {
       try {
         // Mark as no-show
-        await this.reservationService.markNoShow(reservation.id);
+        await this.reservationService.markNoShow(reservation.id, propertyId);
         reservationIds.push(reservation.id);
         count++;
 

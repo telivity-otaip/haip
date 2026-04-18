@@ -26,17 +26,20 @@ import { RolesGuard } from './roles.guard';
     ConfigModule,
   ],
   providers: [
-    // Only register JWT strategy when auth might be enabled
-    // The strategy itself is lazy — only connects to JWKS when a token is actually validated
+    // Register JWT strategy unless auth is explicitly disabled.
+    // The guards (JwtAuthGuard / RolesGuard) are secure-by-default — they enforce
+    // auth unless AUTH_ENABLED === 'false' — so the strategy must be registered
+    // to match. The strategy is lazy — it only connects to JWKS when a token is
+    // actually validated, so no runtime cost when auth is off.
     {
       provide: JwtStrategy,
       useFactory: (configService: ConfigService) => {
-        const authEnabled = configService.get<string>('AUTH_ENABLED', 'false');
-        if (authEnabled === 'true') {
-          return new JwtStrategy(configService);
+        const authEnabled = configService.get<string>('AUTH_ENABLED', 'true');
+        if (authEnabled === 'false') {
+          // Return a no-op strategy when auth is explicitly disabled
+          return {} as JwtStrategy;
         }
-        // Return a no-op strategy when auth is disabled
-        return {} as JwtStrategy;
+        return new JwtStrategy(configService);
       },
       inject: [ConfigService],
     },

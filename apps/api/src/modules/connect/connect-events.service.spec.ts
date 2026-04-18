@@ -80,7 +80,7 @@ describe('ConnectEventsService', () => {
         }),
       }));
 
-      const result = await service.deleteSubscription('sub-1');
+      const result = await service.deleteSubscription('sub-1', 'prop-1');
 
       expect(result.deleted).toBe(true);
       expect(mockDb.update).toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe('ConnectEventsService', () => {
         }),
       }));
 
-      await expect(service.deleteSubscription('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.deleteSubscription('nonexistent', 'prop-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -105,7 +105,7 @@ describe('ConnectEventsService', () => {
         }),
       }));
 
-      const result = await service.testSubscription('sub-1');
+      const result = await service.testSubscription('sub-1', 'prop-1');
 
       expect(result.testSent).toBe(true);
       expect(result.callbackUrl).toBe('https://otaip.example.com/webhooks');
