@@ -72,10 +72,18 @@ export class StripeWebhookController {
 
     let event: Stripe.Event;
     try {
-      // Requires raw body — see rawBody middleware in main.ts
-      const rawBody = (req as any).rawBody;
+      // Stripe requires the exact raw request body for signature verification.
+      // main.ts installs express.raw({ type: 'application/json' }) for this
+      // route, which places the raw Buffer on req.body (and also exposes it
+      // via req.rawBody on some Nest versions). Prefer the Buffer from req.body;
+      // fall back to req.rawBody to stay resilient across middleware orders.
+      const rawBody: Buffer | string | undefined = Buffer.isBuffer(req.body)
+        ? (req.body as Buffer)
+        : ((req as any).rawBody as Buffer | string | undefined);
       if (!rawBody) {
-        throw new Error('Raw body not available. Ensure rawBody middleware is configured.');
+        throw new Error(
+          'Raw body not available. Ensure express.raw() middleware is configured for /api/v1/webhooks/stripe in main.ts.',
+        );
       }
       event = this.stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
     } catch (err: any) {

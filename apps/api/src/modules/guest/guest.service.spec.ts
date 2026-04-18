@@ -3,6 +3,8 @@ import { NotFoundException } from '@nestjs/common';
 import { GuestService } from './guest.service';
 import { DRIZZLE } from '../../database/database.module';
 
+const PROPERTY_ID = '11111111-1111-1111-1111-111111111111';
+
 const mockGuest = {
   id: '550e8400-e29b-41d4-a716-446655440000',
   firstName: 'John',
@@ -23,47 +25,58 @@ const mockGuest = {
 };
 
 /**
- * Drizzle query chains:
- * - select().from().where() → Promise<row[]>  (select queries)
- * - select().from().where().limit().offset().orderBy() → Promise<row[]>  (paginated)
- * - insert().values().returning() → Promise<row[]>
- * - update().set().where().returning() → Promise<row[]>
- * - delete().where().returning() → Promise<row[]>
- * - select({count}).from().where() → Promise<[{count}]>
+ * Build a mock Drizzle DB where:
+ *  - select queries that terminate on .where() resolve to `selectData`
+ *  - select queries that terminate on .limit().offset().orderBy() resolve to `selectData`
+ *  - a separate `reservationLink` controls the propertyId-scoping precheck
+ *    (assertGuestAtProperty → select({id}).from(reservations).where().limit())
+ *  - insert/update/delete .returning() resolve to `selectData`
+ *
+ * Call-order contract for the pre-check: the first select() that terminates on
+ * .limit(1) is treated as the reservation link query.
  */
-function createMockDb(returnData: any[] = [mockGuest]) {
-  // For select queries, the terminal method is where() or orderBy()
-  const selectChain = () => ({
-    from: vi.fn().mockReturnValue({
-      where: vi.fn().mockReturnValue({
-        // For paginated queries
-        limit: vi.fn().mockReturnValue({
-          offset: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockResolvedValue(returnData),
-          }),
-        }),
-        // Direct where() resolves to rows (for findById)
-        then: (resolve: any) => resolve(returnData),
-      }),
-    }),
-  });
+function createMockDb(options: {
+  selectData?: any[];
+  reservationLink?: any[]; // rows returned by the .limit(1) precheck
+} = {}) {
+  const selectData = options.selectData ?? [mockGuest];
+  const reservationLink = options.reservationLink ?? [{ id: 'res-1' }];
 
   const mutateChain = () => ({
     values: vi.fn().mockReturnValue({
-      returning: vi.fn().mockResolvedValue(returnData),
+      returning: vi.fn().mockResolvedValue(selectData),
     }),
     set: vi.fn().mockReturnValue({
       where: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue(returnData),
+        returning: vi.fn().mockResolvedValue(selectData),
       }),
     }),
     where: vi.fn().mockReturnValue({
-      returning: vi.fn().mockResolvedValue(returnData),
+      returning: vi.fn().mockResolvedValue(selectData),
     }),
   });
 
+  // The select() mock distinguishes the two shapes: the reservation-link
+  // precheck terminates on .limit(1); every other select terminates on
+  // .where() or .orderBy() (paginated) or .where() (count).
+  const selectMock: any = vi.fn().mockImplementation(() => ({
+    from: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        // Precheck: .limit(n) → Promise<rows>
+        limit: vi.fn().mockResolvedValue(reservationLink),
+        // Paginated listing: .limit().offset().orderBy()
+        // (the paginated chain below takes precedence when .offset is called)
+        offset: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockResolvedValue(selectData),
+        }),
+        // Direct resolution for findById / count
+        then: (resolve: any) => resolve(selectData),
+      }),
+    }),
+  }));
+
   return {
-    select: vi.fn().mockImplementation(selectChain),
+    select: selectMock,
     insert: vi.fn().mockReturnValue(mutateChain()),
     update: vi.fn().mockReturnValue(mutateChain()),
     delete: vi.fn().mockReturnValue(mutateChain()),
@@ -74,21 +87,20 @@ describe('GuestService', () => {
   let service: GuestService;
   let mockDb: ReturnType<typeof createMockDb>;
 
+  async function makeService(db: ReturnType<typeof createMockDb>) {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [GuestService, { provide: DRIZZLE, useValue: db }],
+    }).compile();
+    return module.get<GuestService>(GuestService);
+  }
+
   beforeEach(async () => {
     mockDb = createMockDb();
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        GuestService,
-        { provide: DRIZZLE, useValue: mockDb },
-      ],
-    }).compile();
-
-    service = module.get<GuestService>(GuestService);
+    service = await makeService(mockDb);
   });
 
   describe('create', () => {
-    it('should create a guest and return it', async () => {
+    it('should create a guest and return it (no property scoping on create)', async () => {
       const result = await service.create({
         firstName: 'John',
         lastName: 'Smith',
@@ -101,92 +113,83 @@ describe('GuestService', () => {
   });
 
   describe('findById', () => {
-    it('should return a guest when found', async () => {
-      const result = await service.findById(mockGuest.id);
+    it('should return a guest when found and linked to the property', async () => {
+      const result = await service.findById(mockGuest.id, PROPERTY_ID);
       expect(result).toEqual(mockGuest);
     });
 
-    it('should throw NotFoundException when guest not found', async () => {
-      const emptyDb = createMockDb([]);
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          GuestService,
-          { provide: DRIZZLE, useValue: emptyDb },
-        ],
-      }).compile();
-      const svc = module.get<GuestService>(GuestService);
+    it('should throw NotFoundException when guest has no reservation at property', async () => {
+      const scopedDb = createMockDb({ reservationLink: [] });
+      const svc = await makeService(scopedDb);
+      await expect(svc.findById(mockGuest.id, PROPERTY_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
 
-      await expect(svc.findById('nonexistent')).rejects.toThrow(
+    it('should throw NotFoundException when guest row is missing', async () => {
+      const emptyDb = createMockDb({ selectData: [] });
+      const svc = await makeService(emptyDb);
+      await expect(svc.findById('nonexistent', PROPERTY_ID)).rejects.toThrow(
         NotFoundException,
       );
     });
   });
 
   describe('update', () => {
-    it('should update and return the guest', async () => {
-      const result = await service.update(mockGuest.id, {
+    it('should update and return the guest when linked to property', async () => {
+      const result = await service.update(mockGuest.id, PROPERTY_ID, {
         firstName: 'Jane',
       });
-
       expect(result).toEqual(mockGuest);
       expect(mockDb.update).toHaveBeenCalled();
     });
 
-    it('should throw NotFoundException when guest not found', async () => {
-      const emptyDb = createMockDb([]);
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          GuestService,
-          { provide: DRIZZLE, useValue: emptyDb },
-        ],
-      }).compile();
-      const svc = module.get<GuestService>(GuestService);
-
+    it('should throw NotFoundException when not linked to property', async () => {
+      const scopedDb = createMockDb({ reservationLink: [] });
+      const svc = await makeService(scopedDb);
       await expect(
-        svc.update('nonexistent', { firstName: 'Jane' }),
+        svc.update(mockGuest.id, PROPERTY_ID, { firstName: 'Jane' }),
       ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('delete', () => {
-    it('should delete the guest', async () => {
-      const result = await service.delete(mockGuest.id);
+    it('should delete the guest when linked to property', async () => {
+      const result = await service.delete(mockGuest.id, PROPERTY_ID);
       expect(result).toEqual({ deleted: true });
       expect(mockDb.delete).toHaveBeenCalled();
     });
 
-    it('should throw NotFoundException when guest not found', async () => {
-      const emptyDb = createMockDb([]);
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          GuestService,
-          { provide: DRIZZLE, useValue: emptyDb },
-        ],
-      }).compile();
-      const svc = module.get<GuestService>(GuestService);
-
-      await expect(svc.delete('nonexistent')).rejects.toThrow(
+    it('should throw NotFoundException when not linked to property', async () => {
+      const scopedDb = createMockDb({ reservationLink: [] });
+      const svc = await makeService(scopedDb);
+      await expect(svc.delete(mockGuest.id, PROPERTY_ID)).rejects.toThrow(
         NotFoundException,
       );
     });
   });
 
   describe('search', () => {
-    it('should return paginated results', async () => {
-      // Mock both the data query and count query
-      const countChain = () => ({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            then: (resolve: any) => resolve([{ count: 1 }]),
-          }),
-        }),
-      });
-
+    it('should return paginated results scoped to property', async () => {
+      // search() issues three select() calls:
+      //   1. subquery (inArray) — `select({guestId}).from(reservations).where(...)`
+      //      — this is NOT awaited directly; drizzle embeds it in SQL. The mock
+      //      just needs .from().where() to be chainable without throwing.
+      //   2. paginated listing — `.from(guests).where().limit().offset().orderBy()`
+      //   3. count — `.from(guests).where()` then awaited via thenable
       let callCount = 0;
       mockDb.select.mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
-          // Data query
+          // inArray subquery — returns a chainable object (never awaited)
+          return {
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockReturnValue({}),
+            }),
+          };
+        }
+        if (callCount === 2) {
+          // paginated data query
           return {
             from: vi.fn().mockReturnValue({
               where: vi.fn().mockReturnValue({
@@ -195,17 +198,21 @@ describe('GuestService', () => {
                     orderBy: vi.fn().mockResolvedValue([mockGuest]),
                   }),
                 }),
-                then: (resolve: any) => resolve([mockGuest]),
               }),
             }),
           };
         }
-        // Count query
-        return countChain();
+        // count query
+        return {
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => resolve([{ count: 1 }]),
+            }),
+          }),
+        };
       });
 
-      const result = await service.search({ page: 1, limit: 20 });
-
+      const result = await service.search(PROPERTY_ID, { page: 1, limit: 20 });
       expect(result).toHaveProperty('data');
       expect(result).toHaveProperty('total');
       expect(result).toHaveProperty('page', 1);
