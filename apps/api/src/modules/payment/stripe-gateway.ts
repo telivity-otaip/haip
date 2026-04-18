@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import type { PaymentGateway, PaymentGatewayResult } from './interfaces/payment-gateway.interface';
+import type {
+  PaymentGateway,
+  PaymentGatewayCallOptions,
+  PaymentGatewayResult,
+} from './interfaces/payment-gateway.interface';
 
 /**
  * Stripe implementation of PaymentGateway.
@@ -14,6 +18,11 @@ import type { PaymentGateway, PaymentGatewayResult } from './interfaces/payment-
  *
  * The `token` parameter is a Stripe PaymentMethod ID (pm_xxx) from Stripe.js/Elements.
  * The `transactionId` parameter is a Stripe PaymentIntent ID (pi_xxx).
+ *
+ * All mutating calls forward an `Idempotency-Key` header when the caller
+ * supplies `options.idempotencyKey`. Stripe dedupes retries with the same
+ * key for 24h, which is our second line of defense against double-charge
+ * if the DB claim commits but the app retries before persisting success.
  */
 @Injectable()
 export class StripeGateway implements PaymentGateway {
@@ -35,19 +44,34 @@ export class StripeGateway implements PaymentGateway {
     });
   }
 
-  async authorize(token: string, amount: number, currency: string): Promise<PaymentGatewayResult> {
+  private requestOptions(options?: PaymentGatewayCallOptions): Stripe.RequestOptions | undefined {
+    if (options?.idempotencyKey) {
+      return { idempotencyKey: options.idempotencyKey };
+    }
+    return undefined;
+  }
+
+  async authorize(
+    token: string,
+    amount: number,
+    currency: string,
+    options?: PaymentGatewayCallOptions,
+  ): Promise<PaymentGatewayResult> {
     try {
-      const paymentIntent = await this.stripe.paymentIntents.create({
-        amount: Math.round(amount * 100), // Stripe uses cents
-        currency: currency.toLowerCase(),
-        payment_method: token,
-        capture_method: 'manual',
-        confirm: true,
-        automatic_payment_methods: {
-          enabled: true,
-          allow_redirects: 'never',
+      const paymentIntent = await this.stripe.paymentIntents.create(
+        {
+          amount: Math.round(amount * 100), // Stripe uses cents
+          currency: currency.toLowerCase(),
+          payment_method: token,
+          capture_method: 'manual',
+          confirm: true,
+          automatic_payment_methods: {
+            enabled: true,
+            allow_redirects: 'never',
+          },
         },
-      });
+        this.requestOptions(options),
+      );
 
       this.logger.log(`PaymentIntent created: ${paymentIntent.id} (${paymentIntent.status})`);
 
@@ -71,14 +95,22 @@ export class StripeGateway implements PaymentGateway {
     }
   }
 
-  async capture(transactionId: string, amount?: number): Promise<PaymentGatewayResult> {
+  async capture(
+    transactionId: string,
+    amount?: number,
+    options?: PaymentGatewayCallOptions,
+  ): Promise<PaymentGatewayResult> {
     try {
       const params: Stripe.PaymentIntentCaptureParams = {};
       if (amount !== undefined) {
         params.amount_to_capture = Math.round(amount * 100);
       }
 
-      const paymentIntent = await this.stripe.paymentIntents.capture(transactionId, params);
+      const paymentIntent = await this.stripe.paymentIntents.capture(
+        transactionId,
+        params,
+        this.requestOptions(options),
+      );
 
       this.logger.log(`PaymentIntent captured: ${paymentIntent.id}`);
 
@@ -93,9 +125,16 @@ export class StripeGateway implements PaymentGateway {
     }
   }
 
-  async void(transactionId: string): Promise<PaymentGatewayResult> {
+  async void(
+    transactionId: string,
+    options?: PaymentGatewayCallOptions,
+  ): Promise<PaymentGatewayResult> {
     try {
-      const paymentIntent = await this.stripe.paymentIntents.cancel(transactionId);
+      const paymentIntent = await this.stripe.paymentIntents.cancel(
+        transactionId,
+        undefined,
+        this.requestOptions(options),
+      );
 
       this.logger.log(`PaymentIntent canceled: ${paymentIntent.id}`);
 
@@ -110,7 +149,11 @@ export class StripeGateway implements PaymentGateway {
     }
   }
 
-  async refund(transactionId: string, amount?: number): Promise<PaymentGatewayResult> {
+  async refund(
+    transactionId: string,
+    amount?: number,
+    options?: PaymentGatewayCallOptions,
+  ): Promise<PaymentGatewayResult> {
     try {
       const params: Stripe.RefundCreateParams = {
         payment_intent: transactionId,
@@ -119,7 +162,7 @@ export class StripeGateway implements PaymentGateway {
         params.amount = Math.round(amount * 100);
       }
 
-      const refund = await this.stripe.refunds.create(params);
+      const refund = await this.stripe.refunds.create(params, this.requestOptions(options));
 
       this.logger.log(`Refund created: ${refund.id} for ${transactionId}`);
 

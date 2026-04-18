@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { FolioService } from '../folio/folio.service';
 import { WebhookService } from '../webhook/webhook.service';
@@ -252,7 +252,26 @@ describe('PaymentService', () => {
 
     it('should reject capture of non-authorized payment', async () => {
       const capturedPayment = { ...mockPayment, status: 'captured' };
-      const db = createMockDb([capturedPayment]);
+      // Bug 1: atomic update-by-status filter returns [] when status isn't
+      // 'authorized'. The service then SELECTs to report the actual status.
+      const db = {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              then: (resolve: any) => resolve([capturedPayment]),
+            }),
+          }),
+        })),
+        insert: vi.fn(),
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([]),
+            }),
+          }),
+        }),
+        delete: vi.fn(),
+      };
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           PaymentService,
@@ -264,8 +283,9 @@ describe('PaymentService', () => {
       }).compile();
       const svc = module.get<PaymentService>(PaymentService);
 
+      // Bug 1: atomic claim now returns ConflictException when status isn't 'authorized'
       await expect(svc.capturePayment('pay-001', 'prop-001')).rejects.toThrow(
-        BadRequestException,
+        ConflictException,
       );
     });
   });

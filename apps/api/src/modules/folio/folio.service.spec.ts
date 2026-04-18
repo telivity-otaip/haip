@@ -233,20 +233,23 @@ describe('FolioService', () => {
     it('should transfer charge between folios', async () => {
       let selectCallCount = 0;
       const targetFolio = { ...mockFolio, id: 'folio-002' };
-      const db = {
+      const thenResolver = (resolve: any) => {
+        selectCallCount++;
+        // Bug 2: new order is deterministic by folio.id: folio-001 (source), folio-002 (target), charge lookup, then recalc sums.
+        if (selectCallCount === 1) resolve([mockFolio]);
+        else if (selectCallCount === 2) resolve([targetFolio]);
+        else if (selectCallCount === 3) resolve([mockCharge]);
+        else resolve([{ total: '0' }]);
+      };
+      const whereChain = () => ({
+        then: thenResolver,
+        // .for('update') returns a thenable that also resolves the current row
+        for: vi.fn().mockReturnValue({ then: thenResolver }),
+      });
+      const db: any = {
         select: vi.fn().mockImplementation(() => ({
           from: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({
-              then: (resolve: any) => {
-                selectCallCount++;
-                // 1: source folio, 2: target folio, 3: charge lookup
-                // 4-5: recalculate charge sums, 6-7: recalculate payment sums
-                if (selectCallCount === 1) resolve([mockFolio]);
-                else if (selectCallCount === 2) resolve([targetFolio]);
-                else if (selectCallCount === 3) resolve([mockCharge]);
-                else resolve([{ total: '0' }]);
-              },
-            }),
+            where: vi.fn().mockImplementation(whereChain),
           }),
         })),
         insert: vi.fn(),
@@ -259,6 +262,8 @@ describe('FolioService', () => {
         }),
         delete: vi.fn(),
       };
+      // Bug 2: transferCharge wraps everything in db.transaction — pass tx = db.
+      db.transaction = (cb: any) => cb(db);
 
       const module: TestingModule = await Test.createTestingModule({
         providers: [

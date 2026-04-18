@@ -74,6 +74,7 @@ describe('StripeGateway', () => {
           capture_method: 'manual',
           confirm: true,
         }),
+        undefined,
       );
     });
 
@@ -87,6 +88,7 @@ describe('StripeGateway', () => {
 
       expect(stripeInstance.paymentIntents.create).toHaveBeenCalledWith(
         expect.objectContaining({ amount: 29999 }),
+        undefined,
       );
     });
 
@@ -125,7 +127,7 @@ describe('StripeGateway', () => {
 
       expect(result.success).toBe(true);
       expect(result.transactionId).toBe('pi_test_123');
-      expect(stripeInstance.paymentIntents.capture).toHaveBeenCalledWith('pi_test_123', {});
+      expect(stripeInstance.paymentIntents.capture).toHaveBeenCalledWith('pi_test_123', {}, undefined);
     });
 
     it('should support partial capture with amount', async () => {
@@ -138,7 +140,7 @@ describe('StripeGateway', () => {
 
       expect(stripeInstance.paymentIntents.capture).toHaveBeenCalledWith('pi_test_123', {
         amount_to_capture: 7550,
-      });
+      }, undefined);
     });
 
     it('should handle capture failure', async () => {
@@ -163,7 +165,7 @@ describe('StripeGateway', () => {
       const result = await gateway.void('pi_test_123');
 
       expect(result.success).toBe(true);
-      expect(stripeInstance.paymentIntents.cancel).toHaveBeenCalledWith('pi_test_123');
+      expect(stripeInstance.paymentIntents.cancel).toHaveBeenCalledWith('pi_test_123', undefined, undefined);
     });
 
     it('should handle void failure', async () => {
@@ -190,7 +192,7 @@ describe('StripeGateway', () => {
       expect(result.transactionId).toBe('re_test_123');
       expect(stripeInstance.refunds.create).toHaveBeenCalledWith({
         payment_intent: 'pi_test_123',
-      });
+      }, undefined);
     });
 
     it('should create a partial refund with amount in cents', async () => {
@@ -204,7 +206,7 @@ describe('StripeGateway', () => {
       expect(stripeInstance.refunds.create).toHaveBeenCalledWith({
         payment_intent: 'pi_test_123',
         amount: 5000,
-      });
+      }, undefined);
     });
 
     it('should handle refund failure', async () => {
