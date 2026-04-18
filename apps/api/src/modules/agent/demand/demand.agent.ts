@@ -94,11 +94,19 @@ export class DemandForecastAgent implements HaipAgent, OnModuleInit {
         ),
       );
 
-    // Count on-the-books per future date
+    // Count on-the-books per future date — expand across all occupied nights
     const otb = new Map<string, number>();
     for (const res of futureReservations) {
-      const arrival = res.arrivalDate as string;
-      otb.set(arrival, (otb.get(arrival) ?? 0) + 1);
+      const arrival = new Date(res.arrivalDate as string);
+      const departure = res.departureDate ? new Date(res.departureDate as string) : new Date(arrival.getTime() + 86400000);
+      const nights = Math.max(1, Math.ceil((departure.getTime() - arrival.getTime()) / 86400000));
+
+      for (let n = 0; n < nights; n++) {
+        const d = new Date(arrival);
+        d.setDate(d.getDate() + n);
+        const dateStr = d.toISOString().split('T')[0]!;
+        otb.set(dateStr, (otb.get(dateStr) ?? 0) + 1);
+      }
     }
 
     return {
@@ -200,18 +208,27 @@ export class DemandForecastAgent implements HaipAgent, OnModuleInit {
   // --- Private ---
 
   private buildHistoricalDays(
-    reservationData: Array<{ arrivalDate: string; totalAmount: string; status: string }>,
+    reservationData: Array<{ arrivalDate: string; departureDate?: string; totalAmount: string; status: string }>,
     totalRooms: number,
   ): HistoricalDay[] {
-    // Group reservations by arrival date
+    // Group reservations by each occupied night in [arrivalDate, departureDate)
     const byDate = new Map<string, { count: number; totalRevenue: number }>();
 
     for (const res of reservationData) {
-      const date = res.arrivalDate as string;
-      const existing = byDate.get(date) ?? { count: 0, totalRevenue: 0 };
-      existing.count++;
-      existing.totalRevenue += parseFloat(res.totalAmount ?? '0');
-      byDate.set(date, existing);
+      const arrival = new Date(res.arrivalDate);
+      const departure = res.departureDate ? new Date(res.departureDate) : new Date(arrival.getTime() + 86400000);
+      const nights = Math.max(1, Math.ceil((departure.getTime() - arrival.getTime()) / 86400000));
+      const revenuePerNight = parseFloat(res.totalAmount ?? '0') / nights;
+
+      for (let n = 0; n < nights; n++) {
+        const d = new Date(arrival);
+        d.setDate(d.getDate() + n);
+        const date = d.toISOString().split('T')[0]!;
+        const existing = byDate.get(date) ?? { count: 0, totalRevenue: 0 };
+        existing.count++;
+        existing.totalRevenue += revenuePerNight;
+        byDate.set(date, existing);
+      }
     }
 
     return [...byDate.entries()].map(([date, data]) => {

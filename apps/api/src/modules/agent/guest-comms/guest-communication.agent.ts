@@ -123,6 +123,7 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
     const rpMap = new Map(rpData.map((rp: any) => [rp.id, rp]));
 
     // Get previous communications for these reservations (to avoid duplicates)
+    // Only consider approved/auto_executed decisions as "sent" — not pending/rejected/failed
     const previousComms = await this.db
       .select()
       .from(agentDecisions)
@@ -130,6 +131,7 @@ export class GuestCommunicationAgent implements HaipAgent, OnModuleInit {
         and(
           eq(agentDecisions.propertyId, propertyId),
           eq(agentDecisions.agentType, 'guest_comms' as any),
+          inArray(agentDecisions.status, ['approved', 'auto_executed'] as any),
         ),
       );
     // Map: reservationId → set of email types already sent

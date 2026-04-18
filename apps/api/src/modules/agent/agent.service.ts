@@ -55,6 +55,7 @@ export class AgentService {
       const shouldAutoExecute =
         config.mode === 'autopilot' && rec.confidence >= threshold;
 
+      // Always insert as pending first — update to auto_executed only on success
       const [decision] = await this.db
         .insert(agentDecisions)
         .values({
@@ -64,8 +65,7 @@ export class AgentService {
           inputSnapshot: rec.inputSnapshot,
           recommendation: rec.recommendation,
           confidence: rec.confidence.toFixed(2),
-          status: shouldAutoExecute ? 'auto_executed' : 'pending',
-          executedAt: shouldAutoExecute ? new Date() : null,
+          status: 'pending',
         })
         .returning();
 
@@ -79,8 +79,22 @@ export class AgentService {
             agentType,
             status: 'auto_executed',
           });
+          // Mark as auto_executed only on success
+          await this.db
+            .update(agentDecisions)
+            .set({ status: 'auto_executed', executedAt: new Date() })
+            .where(eq(agentDecisions.id, decision.id));
+          decision.status = 'auto_executed';
         } catch (error: any) {
-          // Log but don't fail the whole run
+          // Mark as failed with error details
+          await this.db
+            .update(agentDecisions)
+            .set({
+              status: 'rejected',
+              outcome: { error: error.message ?? 'Execution failed', autoExecutionFailed: true },
+            })
+            .where(eq(agentDecisions.id, decision.id));
+          decision.status = 'rejected';
         }
       }
 
@@ -201,7 +215,7 @@ export class AgentService {
     }
   }
 
-  /** Get or create agent config for a property. */
+  /** Get or create agent config for a property. Uses upsert to prevent race conditions. */
   async getOrCreateConfig(propertyId: string, agentType: string) {
     this.validateAgentType(agentType);
 
@@ -217,11 +231,11 @@ export class AgentService {
 
     if (existing) return existing;
 
-    // Create default config
+    // Create default config using onConflictDoNothing to handle race conditions
     const agent = this.agents.get(agentType);
     const defaultConfig = agent?.getDefaultConfig() ?? {};
 
-    const [created] = await this.db
+    await this.db
       .insert(agentConfigs)
       .values({
         propertyId,
@@ -230,9 +244,20 @@ export class AgentService {
         mode: 'suggest',
         config: defaultConfig,
       })
-      .returning();
+      .onConflictDoNothing();
 
-    return created;
+    // Re-fetch to get the row (whether we created it or someone else did)
+    const [config] = await this.db
+      .select()
+      .from(agentConfigs)
+      .where(
+        and(
+          eq(agentConfigs.propertyId, propertyId),
+          eq(agentConfigs.agentType, agentType as any),
+        ),
+      );
+
+    return config;
   }
 
   /** Update agent config. */

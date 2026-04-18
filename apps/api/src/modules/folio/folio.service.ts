@@ -523,8 +523,12 @@ export class FolioService {
     const dd = String(now.getDate()).padStart(2, '0');
     const prefix = `F-${yy}${mm}${dd}`;
 
+    // Use MAX to find the highest existing sequence for this prefix,
+    // which is safe under concurrent inserts (unique constraint prevents duplicates)
     const [result] = await this.db
-      .select({ count: sql<number>`count(*)` })
+      .select({
+        maxNumber: sql<string>`max(${folios.folioNumber})`,
+      })
       .from(folios)
       .where(
         and(
@@ -533,7 +537,11 @@ export class FolioService {
         ),
       );
 
-    const seq = Number(result?.count ?? 0) + 1;
+    let seq = 1;
+    if (result?.maxNumber) {
+      const lastSeq = parseInt(result.maxNumber.split('-').pop() ?? '0', 10);
+      seq = lastSeq + 1;
+    }
     return `${prefix}-${String(seq).padStart(4, '0')}`;
   }
 }
