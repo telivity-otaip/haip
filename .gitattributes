@@ -1,0 +1,18 @@
+# Enforce LF line endings for all text files regardless of client
+# core.autocrlf setting. Shell scripts with CRLF crash in Linux containers
+# (shebang becomes "#!/bin/bash\r" → exit 126). See issue #88.
+
+*.sh    text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.sql   text eol=lf
+*.env*  text eol=lf
+Dockerfile text eol=lf
