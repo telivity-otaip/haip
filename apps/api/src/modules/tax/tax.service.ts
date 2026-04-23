@@ -88,6 +88,8 @@ export class TaxService {
         code: dto.code,
         type: dto.type,
         rate: dto.rate,
+        splitPercentage:
+          dto.splitPercentage !== undefined ? dto.splitPercentage.toString() : null,
         appliesToChargeTypes: dto.appliesToChargeTypes,
         exemptions: dto.exemptions,
         isCompounding: dto.isCompounding ?? false,
@@ -242,6 +244,19 @@ export class TaxService {
           taxAmount = base.times(rateValue).div(100);
           break;
         }
+        case 'split_component': {
+          // Rate is applied only to `splitPercentage %` of the charge.
+          // Compounding interacts the same way as percentage — if the rule is
+          // compounding we still scale the (running) base by the split fraction
+          // before applying the rate.
+          const splitPct = rule.splitPercentage
+            ? new Decimal(rule.splitPercentage)
+            : new Decimal(0);
+          const base = rule.isCompounding ? runningBase : amount;
+          const taxableBase = base.times(splitPct).div(100);
+          taxAmount = taxableBase.times(rateValue).div(100);
+          break;
+        }
         case 'flat_per_night':
           taxAmount = rateValue.times(options?.numberOfNights ?? 1);
           break;
@@ -311,6 +326,16 @@ export class TaxService {
         case 'percentage':
           totalPercentageRate = totalPercentageRate.plus(rateValue);
           break;
+        case 'split_component': {
+          // Effective rate contribution is (splitPercentage/100) * rate.
+          // Keep it in "percent" units (consistent with totalPercentageRate)
+          // by multiplying rate by splitPercentage/100.
+          const splitPct = rule.splitPercentage
+            ? new Decimal(rule.splitPercentage)
+            : new Decimal(0);
+          totalPercentageRate = totalPercentageRate.plus(rateValue.times(splitPct).div(100));
+          break;
+        }
         case 'flat_per_night':
           totalFlat = totalFlat.plus(rateValue.times(options?.numberOfNights ?? 1));
           break;

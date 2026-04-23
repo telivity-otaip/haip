@@ -27,6 +27,7 @@ export const taxRuleTypeEnum = pgEnum('tax_rule_type', [
   'percentage',       // e.g., 6% of charge amount
   'flat_per_night',   // e.g., $2.50 per night
   'flat_per_stay',    // e.g., $10 one-time per stay
+  'split_component',  // rate applied to splitPercentage % of the charge (e.g., DE breakfast: 7% VAT on 70% food portion)
 ]);
 
 /**
@@ -49,6 +50,11 @@ export const taxRules = pgTable('tax_rules', {
   type: taxRuleTypeEnum('type').notNull(),
 
   rate: numeric('rate', { precision: 8, scale: 4 }).notNull(), // 6.0000 for 6%, or 2.50 for flat
+
+  // Only used when type = 'split_component'. Percentage of the charge to which
+  // `rate` is applied (e.g., 70.00 = rate applies to 70% of charge).
+  // Nullable — required at the DTO layer only when type=split_component.
+  splitPercentage: numeric('split_percentage', { precision: 5, scale: 2 }),
 
   appliesToChargeTypes: text('applies_to_charge_types').array(), // ['room', 'room_upgrade'] or null for all
   exemptions: jsonb('exemptions').$type<{

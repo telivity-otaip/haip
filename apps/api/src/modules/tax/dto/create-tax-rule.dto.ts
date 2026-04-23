@@ -1,4 +1,17 @@
-import { IsString, IsNumber, IsBoolean, IsOptional, IsArray, IsDateString, IsObject, IsEnum, IsInt } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsBoolean,
+  IsOptional,
+  IsArray,
+  IsDateString,
+  IsObject,
+  IsEnum,
+  IsInt,
+  ValidateIf,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class CreateTaxRuleDto {
   @IsString()
@@ -7,11 +20,19 @@ export class CreateTaxRuleDto {
   @IsString()
   code!: string;
 
-  @IsEnum(['percentage', 'flat_per_night', 'flat_per_stay'])
-  type!: 'percentage' | 'flat_per_night' | 'flat_per_stay';
+  @IsEnum(['percentage', 'flat_per_night', 'flat_per_stay', 'split_component'])
+  type!: 'percentage' | 'flat_per_night' | 'flat_per_stay' | 'split_component';
 
   @IsString()
   rate!: string;
+
+  // Required when type === 'split_component', otherwise ignored.
+  // Represents the % of the charge amount to which `rate` is applied.
+  @ValidateIf((o) => o.type === 'split_component')
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(100)
+  splitPercentage?: number;
 
   @IsArray()
   @IsString({ each: true })

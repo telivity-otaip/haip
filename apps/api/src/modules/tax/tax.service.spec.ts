@@ -801,4 +801,265 @@ describe('TaxService', () => {
       expect(result.taxes).toHaveLength(0);
     });
   });
+
+  // =========================================================================
+  // Split-component tax (Germany Berlin — breakfast split across VAT rates)
+  // =========================================================================
+
+  describe('Split-Component Tax (Germany Berlin)', () => {
+    const berlinProfile = {
+      id: 'tp-berlin',
+      propertyId: 'prop-004',
+      name: 'Germany Berlin Tax Profile',
+      jurisdictionCode: 'DE-BE-BERLIN',
+      isActive: true,
+      effectiveFrom: '2024-01-01',
+      effectiveTo: null,
+    };
+
+    const berlinRules = [
+      {
+        id: 'rule-de-accom',
+        taxProfileId: 'tp-berlin',
+        name: 'Accommodation VAT',
+        code: 'DE_ACCOM_VAT',
+        type: 'percentage',
+        rate: '7.00',
+        splitPercentage: null,
+        appliesToChargeTypes: ['room', 'room_upgrade'],
+        exemptions: null,
+        isCompounding: false,
+        isActive: true,
+        sortOrder: 1,
+        effectiveFrom: '2024-01-01',
+        effectiveTo: null,
+      },
+      {
+        id: 'rule-de-city',
+        taxProfileId: 'tp-berlin',
+        name: 'City Tax (Übernachtungsteuer)',
+        code: 'DE_CITY_TAX',
+        type: 'percentage',
+        rate: '5.00',
+        splitPercentage: null,
+        appliesToChargeTypes: ['room'],
+        exemptions: { guestTypes: ['business'] },
+        isCompounding: false,
+        isActive: true,
+        sortOrder: 2,
+        effectiveFrom: '2024-01-01',
+        effectiveTo: null,
+      },
+      {
+        id: 'rule-de-food',
+        taxProfileId: 'tp-berlin',
+        name: 'Food VAT',
+        code: 'DE_FOOD_VAT',
+        type: 'split_component',
+        rate: '7.00',
+        splitPercentage: '70.00',
+        appliesToChargeTypes: ['breakfast', 'meal', 'half_board', 'full_board'],
+        exemptions: null,
+        isCompounding: false,
+        isActive: true,
+        sortOrder: 1,
+        effectiveFrom: '2024-01-01',
+        effectiveTo: null,
+      },
+      {
+        id: 'rule-de-bev',
+        taxProfileId: 'tp-berlin',
+        name: 'Beverage VAT',
+        code: 'DE_BEVERAGE_VAT',
+        type: 'split_component',
+        rate: '19.00',
+        splitPercentage: '30.00',
+        appliesToChargeTypes: ['breakfast', 'meal', 'half_board', 'full_board'],
+        exemptions: null,
+        isCompounding: false,
+        isActive: true,
+        sortOrder: 2,
+        effectiveFrom: '2024-01-01',
+        effectiveTo: null,
+      },
+      {
+        id: 'rule-de-std',
+        taxProfileId: 'tp-berlin',
+        name: 'Standard VAT',
+        code: 'DE_STD_VAT',
+        type: 'percentage',
+        rate: '19.00',
+        splitPercentage: null,
+        appliesToChargeTypes: ['minibar', 'spa', 'parking', 'telephone', 'laundry'],
+        exemptions: null,
+        isCompounding: false,
+        isActive: true,
+        sortOrder: 1,
+        effectiveFrom: '2024-01-01',
+        effectiveTo: null,
+      },
+    ];
+
+    function buildBerlinDb(rulesOverride?: any[], guestOverride?: any) {
+      const rules = rulesOverride ?? berlinRules;
+      let selectCallCount = 0;
+      return {
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockReturnValue(rules),
+              then: (resolve: any) => {
+                selectCallCount++;
+                if (selectCallCount === 1) return resolve([berlinProfile]);
+                if (guestOverride !== undefined) return resolve([guestOverride]);
+                return resolve(rules);
+              },
+            }),
+          }),
+        })),
+        insert: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      };
+    }
+
+    async function makeService(mockDb: any) {
+      const module = await Test.createTestingModule({
+        providers: [TaxService, { provide: DRIZZLE, useValue: mockDb }],
+      }).compile();
+      return module.get<TaxService>(TaxService);
+    }
+
+    it('should calculate split-component tax on a €20 breakfast (7% on 70% + 19% on 30%)', async () => {
+      // Use only the two split rules to isolate the math
+      const splitOnlyRules = berlinRules.filter(r => r.type === 'split_component');
+      const service = await makeService(buildBerlinDb(splitOnlyRules));
+
+      const items = await service.calculateTaxes('20.00', 'breakfast', 'prop-004', '2026-04-07');
+
+      expect(items).toHaveLength(2);
+      // 7% of (20 * 70%) = 7% of 14 = 0.98
+      expect(items[0]!.code).toBe('DE_FOOD_VAT');
+      expect(items[0]!.amount).toBe('0.98');
+      // 19% of (20 * 30%) = 19% of 6 = 1.14
+      expect(items[1]!.code).toBe('DE_BEVERAGE_VAT');
+      expect(items[1]!.amount).toBe('1.14');
+
+      const total = items.reduce((sum, i) => sum + parseFloat(i.amount), 0);
+      expect(total).toBeCloseTo(2.12, 2);
+    });
+
+    it('should back-calculate €22.12 gross breakfast to €20 net', async () => {
+      const splitOnlyRules = berlinRules.filter(r => r.type === 'split_component');
+      const service = await makeService(buildBerlinDb(splitOnlyRules));
+
+      const result = await service.backCalculateFromInclusive(
+        '22.12',
+        'breakfast',
+        'prop-004',
+        '2026-04-07',
+      );
+
+      // Effective rate = 0.7*0.07 + 0.3*0.19 = 0.049 + 0.057 = 0.106 (10.6%)
+      // net = 22.12 / 1.106 = 20.00 (to 2 dp)
+      expect(parseFloat(result.baseAmount)).toBeCloseTo(20, 1);
+    });
+
+    it('should apply 7% accommodation VAT + 5% city tax on a €100 room charge', async () => {
+      const service = await makeService(buildBerlinDb());
+
+      const items = await service.calculateTaxes('100.00', 'room', 'prop-004', '2026-04-07');
+
+      expect(items).toHaveLength(2);
+      expect(items[0]!.code).toBe('DE_ACCOM_VAT');
+      expect(items[0]!.amount).toBe('7.00');
+      expect(items[1]!.code).toBe('DE_CITY_TAX');
+      expect(items[1]!.amount).toBe('5.00');
+      const total = items.reduce((sum, i) => sum + parseFloat(i.amount), 0);
+      expect(total).toBeCloseTo(12, 2);
+    });
+
+    it('should apply split-component rules on a €20 breakfast (full Berlin profile)', async () => {
+      const service = await makeService(buildBerlinDb());
+
+      const items = await service.calculateTaxes('20.00', 'breakfast', 'prop-004', '2026-04-07');
+
+      // Only split rules apply to breakfast charge type
+      expect(items).toHaveLength(2);
+      const total = items.reduce((sum, i) => sum + parseFloat(i.amount), 0);
+      expect(total).toBeCloseTo(2.12, 2);
+    });
+
+    it('should apply 19% standard VAT on a €10 minibar charge', async () => {
+      const service = await makeService(buildBerlinDb());
+
+      const items = await service.calculateTaxes('10.00', 'minibar', 'prop-004', '2026-04-07');
+
+      expect(items).toHaveLength(1);
+      expect(items[0]!.code).toBe('DE_STD_VAT');
+      expect(items[0]!.amount).toBe('1.90');
+    });
+
+    it('should exempt business guests from city tax (only accommodation VAT applies)', async () => {
+      const service = await makeService(
+        buildBerlinDb(undefined, { id: 'guest-biz', vipLevel: 'business' }),
+      );
+
+      const items = await service.calculateTaxes('100.00', 'room', 'prop-004', '2026-04-07', {
+        guestId: 'guest-biz',
+      });
+
+      expect(items).toHaveLength(1);
+      expect(items[0]!.code).toBe('DE_ACCOM_VAT');
+      expect(items[0]!.amount).toBe('7.00');
+      expect(items.find(i => i.code === 'DE_CITY_TAX')).toBeUndefined();
+    });
+
+    it('should calculate independent split rules that do not sum to 100%', async () => {
+      // Two split rules: 50% at 10%, 30% at 20% — should each compute independently
+      const partialRules = [
+        {
+          id: 'rule-split-a',
+          taxProfileId: 'tp-berlin',
+          name: 'Split A',
+          code: 'SPLIT_A',
+          type: 'split_component',
+          rate: '10.00',
+          splitPercentage: '50.00',
+          appliesToChargeTypes: ['breakfast'],
+          exemptions: null,
+          isCompounding: false,
+          isActive: true,
+          sortOrder: 1,
+          effectiveFrom: '2024-01-01',
+          effectiveTo: null,
+        },
+        {
+          id: 'rule-split-b',
+          taxProfileId: 'tp-berlin',
+          name: 'Split B',
+          code: 'SPLIT_B',
+          type: 'split_component',
+          rate: '20.00',
+          splitPercentage: '30.00',
+          appliesToChargeTypes: ['breakfast'],
+          exemptions: null,
+          isCompounding: false,
+          isActive: true,
+          sortOrder: 2,
+          effectiveFrom: '2024-01-01',
+          effectiveTo: null,
+        },
+      ];
+      const service = await makeService(buildBerlinDb(partialRules));
+
+      const items = await service.calculateTaxes('100.00', 'breakfast', 'prop-004', '2026-04-07');
+
+      expect(items).toHaveLength(2);
+      // 10% of (100 * 50%) = 10% of 50 = 5.00
+      expect(items[0]!.amount).toBe('5.00');
+      // 20% of (100 * 30%) = 20% of 30 = 6.00
+      expect(items[1]!.amount).toBe('6.00');
+    });
+  });
 });
