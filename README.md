@@ -368,11 +368,11 @@ cp .env.example .env
 # Build workspace packages (database + shared)
 pnpm build
 
-# Run database migrations
-pnpm --filter @telivityhaip/api run migrate
+# Run database migrations (pushes schema to Postgres)
+pnpm --filter @telivityhaip/database run migrate
 
 # Seed demo data (Telivity Grand Hotel)
-pnpm --filter @telivityhaip/api run seed
+pnpm --filter @telivityhaip/database run seed
 
 # Start the API (with hot reload)
 pnpm dev

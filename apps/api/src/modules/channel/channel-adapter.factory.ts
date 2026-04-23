@@ -1,8 +1,11 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import type { ChannelAdapter } from './channel-adapter.interface';
 import { MockChannelAdapter } from './adapters/mock.adapter';
-import { BookingComAdapter } from './adapters/booking-com';
-import { SiteMinderAdapter } from './adapters/siteminder';
+// Import directly from the adapter files (not the barrel index) to avoid a
+// circular import: barrel re-exports BookingComInboundController, which
+// imports InboundReservationService, which imports ChannelAdapterFactory.
+import { BookingComAdapter } from './adapters/booking-com/booking-com.adapter';
+import { SiteMinderAdapter } from './adapters/siteminder/siteminder.adapter';
 
 /**
  * Factory that maps adapterType strings to ChannelAdapter instances.
