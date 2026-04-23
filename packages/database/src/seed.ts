@@ -734,6 +734,83 @@ async function main() {
   ]);
 
   // -----------------------------------------------------------------------
+  // 14. Tax Profile — Germany Berlin (split-component breakfast VAT)
+  //     German hotels split a single breakfast charge across two VAT rates:
+  //     7% on the food portion (70%) and 19% on the beverage portion (30%).
+  // -----------------------------------------------------------------------
+  const berlinTaxProfileId = sid('a5000001', 4);
+
+  await db.insert(schema.taxProfiles).values({
+    id: berlinTaxProfileId,
+    propertyId,
+    name: 'Germany Berlin Tax Profile',
+    jurisdictionCode: 'DE-BE-BERLIN',
+    isActive: false, // inactive — only one profile active per property
+    effectiveFrom: '2024-01-01',
+  });
+
+  await db.insert(schema.taxRules).values([
+    {
+      id: sid('a5400001', 1),
+      taxProfileId: berlinTaxProfileId,
+      name: 'Accommodation VAT',
+      code: 'DE_ACCOM_VAT',
+      type: 'percentage',
+      rate: '7.00',
+      appliesToChargeTypes: ['room', 'room_upgrade'],
+      sortOrder: 1,
+      effectiveFrom: '2024-01-01',
+    },
+    {
+      id: sid('a5400001', 2),
+      taxProfileId: berlinTaxProfileId,
+      name: 'City Tax (Übernachtungsteuer)',
+      code: 'DE_CITY_TAX',
+      type: 'percentage',
+      rate: '5.00',
+      appliesToChargeTypes: ['room'],
+      exemptions: { guestTypes: ['business'] },
+      sortOrder: 2,
+      effectiveFrom: '2024-01-01',
+    },
+    {
+      id: sid('a5400001', 3),
+      taxProfileId: berlinTaxProfileId,
+      name: 'Food VAT',
+      code: 'DE_FOOD_VAT',
+      type: 'split_component',
+      rate: '7.00',
+      splitPercentage: '70.00',
+      appliesToChargeTypes: ['breakfast', 'meal', 'half_board', 'full_board'],
+      sortOrder: 1,
+      effectiveFrom: '2024-01-01',
+    },
+    {
+      id: sid('a5400001', 4),
+      taxProfileId: berlinTaxProfileId,
+      name: 'Beverage VAT',
+      code: 'DE_BEVERAGE_VAT',
+      type: 'split_component',
+      rate: '19.00',
+      splitPercentage: '30.00',
+      appliesToChargeTypes: ['breakfast', 'meal', 'half_board', 'full_board'],
+      sortOrder: 2,
+      effectiveFrom: '2024-01-01',
+    },
+    {
+      id: sid('a5400001', 5),
+      taxProfileId: berlinTaxProfileId,
+      name: 'Standard VAT',
+      code: 'DE_STD_VAT',
+      type: 'percentage',
+      rate: '19.00',
+      appliesToChargeTypes: ['minibar', 'spa', 'parking', 'telephone', 'laundry'],
+      sortOrder: 1,
+      effectiveFrom: '2024-01-01',
+    },
+  ]);
+
+  // -----------------------------------------------------------------------
   // Done
   // -----------------------------------------------------------------------
   console.log('Seed complete.');
@@ -748,7 +825,7 @@ async function main() {
   console.log('  Night Audit:   1 completed run');
   console.log('  Channels:      2 connections');
   console.log('  Webhooks:      1 subscription');
-  console.log('  Tax Profiles:  3 (Miami Beach 13%, Barcelona IVA+tourist, Amsterdam BTW+tourist)');
+  console.log('  Tax Profiles:  4 (Miami Beach 13%, Barcelona IVA+tourist, Amsterdam BTW+tourist, Berlin split-component)');
 
   await client.end();
 }

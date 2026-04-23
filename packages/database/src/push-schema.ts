@@ -31,7 +31,9 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'audit_run_status') THEN CREATE TYPE audit_run_status AS ENUM ('running','completed','failed','rolled_back'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'channel_status') THEN CREATE TYPE channel_status AS ENUM ('active','inactive','error','pending_setup'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'sync_direction') THEN CREATE TYPE sync_direction AS ENUM ('push','pull','bidirectional'); END IF; END $$`,
-    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tax_rule_type') THEN CREATE TYPE tax_rule_type AS ENUM ('percentage','flat_per_night','flat_per_stay'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tax_rule_type') THEN CREATE TYPE tax_rule_type AS ENUM ('percentage','flat_per_night','flat_per_stay','split_component'); END IF; END $$`,
+    // Idempotent add: append split_component to tax_rule_type if it already existed without it
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'tax_rule_type' AND e.enumlabel = 'split_component') THEN ALTER TYPE tax_rule_type ADD VALUE 'split_component'; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_source') THEN CREATE TYPE review_source AS ENUM ('google','tripadvisor','booking_com','expedia','other'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_response_status') THEN CREATE TYPE review_response_status AS ENUM ('pending','drafted','approved','posted'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_type') THEN CREATE TYPE agent_type AS ENUM ('pricing','demand_forecast','channel_mix','overbooking','night_audit','housekeeping','cancellation','guest_comms','review_response'); END IF; END $$`,
@@ -423,6 +425,7 @@ async function main() {
       code varchar(30) NOT NULL,
       type tax_rule_type NOT NULL,
       rate numeric(8,4) NOT NULL,
+      split_percentage numeric(5,2),
       applies_to_charge_types text[],
       exemptions jsonb,
       is_compounding boolean NOT NULL DEFAULT false,
@@ -526,6 +529,14 @@ async function main() {
 
   for (const t of tables) {
     await db.execute(sql.raw(t));
+  }
+
+  // Idempotent column additions for pre-existing databases
+  const alters = [
+    `ALTER TABLE tax_rules ADD COLUMN IF NOT EXISTS split_percentage numeric(5,2)`,
+  ];
+  for (const a of alters) {
+    await db.execute(sql.raw(a));
   }
 
   console.log('Schema pushed successfully — all tables created.');
