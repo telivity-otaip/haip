@@ -41,8 +41,9 @@
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage",
     "seed": "tsx src/seed.ts",
+    "migrate": "tsx src/push-schema.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "tsx src/push-schema.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
