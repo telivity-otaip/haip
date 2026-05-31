@@ -36,7 +36,7 @@
 
 The hotel industry runs on closed-source, legacy PMS platforms that charge per-room fees, lock data behind proprietary APIs, and treat integrations as an afterthought. Hotels pay $5–15/room/month just for the privilege of managing their own operations.
 
-HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **9 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
+HAIP is a **complete, production-grade hotel Property Management System** built from scratch with modern architecture. Reservation lifecycle, folio & billing, rate plans, housekeeping with digital checklists, night audit, channel distribution to 450+ OTAs, Stripe payment processing, Keycloak authentication, tax calculation engine, revenue management — and **10 built-in AI agents** that optimize revenue, predict cancellations, detect audit anomalies, prioritize receivables collections, schedule housekeeping, automate guest communications, and draft review responses. All open source under Apache 2.0.
 
 What makes HAIP different is that **AI agents are built into the architecture from day one** — not as a bolt-on, but as first-class citizens with their own lifecycle, decision logging, and learning loop. HAIP is the sister project to [OTAIP](https://github.com/telivity-otaip/otaip) (Open Travel AI Platform). Together they form **Telivity's open-source travel infrastructure**. OTAIP agents connect to HAIP via the Connect API — the PMS works without AI, but the AI makes it extraordinary.
 
@@ -137,7 +137,7 @@ graph TB
 
 ## AI Agents
 
-HAIP includes **9 built-in AI agents** — 4 for revenue management, 3 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
+HAIP includes **10 built-in AI agents** — 4 for revenue management, 4 for operations intelligence, and 2 for guest engagement. Every agent follows the `HaipAgent` interface:
 
 ```
 analyze() → recommend() → execute() → recordOutcome() → train()
@@ -164,9 +164,10 @@ analyze() → recommend() → execute() → recordOutcome() → train()
 
 | Agent | What It Does |
 |-------|-------------|
-| **Night Audit Anomaly Detection** | Scans checked-in reservations and folios for 10 anomaly types: unposted charges, missing tax, payment mismatches, stale check-ins, duplicate folios, unusual charges (z-score > 2.5 statistical outlier detection). Ranked by severity (critical/warning/info) and confidence. |
+| **Night Audit Anomaly Detection** | Scans checked-in reservations, folios, and closed cashier shifts for 11 anomaly types: unposted charges, missing tax, payment mismatches, stale check-ins, duplicate folios, unusual charges, and cash-drawer variance outliers (z-score > 2.5 statistical outlier detection). Ranked by severity (critical/warning/info) and confidence. |
 | **Housekeeping Optimization** | Builds workload-balanced cleaning schedules. Prioritizes VIP and early check-in rooms, groups by floor for route efficiency, estimates cleaning times by task type (checkout 30min, stayover 20min, deep clean 60min, suite 45min). |
-| **Cancellation Prediction** | Scores every active reservation with a cancellation probability based on booking source (OTA 25% base vs direct 8%), deposit status, repeat guest history, VIP level, lead time, and days until arrival. Aggregates risk by date for overbooking decisions. |
+| **Cancellation Prediction** | Scores every active reservation with a cancellation probability based on booking source (OTA 25% base vs direct 8%), deposit status, repeat guest history, VIP level, lead time, and days until arrival. Adds **deposit-forfeit risk** scoring on held deposits (likely-forfeit vs likely-refund exposure). Aggregates risk by date for overbooking decisions. |
+| **A/R Collections Prioritization** | Ranks open Accounts Receivable ledgers by collection priority — weighing outstanding balance, days overdue beyond payment terms, and open transfer count — into low/medium/high risk tiers with a recommended action (monitor, send reminder, send final notice). |
 
 ### Guest Engagement Agents
 
@@ -249,7 +250,7 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Night Audit & Reporting
 - Automated night audit: room revenue posting, no-show processing, rate validation, day close
-- AI anomaly detection: 10 anomaly types with severity ranking and confidence scores
+- AI anomaly detection: 11 anomaly types (incl. cash-drawer variance) with severity ranking and confidence scores
 - Daily revenue reports with department breakdown
 - Occupancy reports with ADR (Average Daily Rate) and RevPAR
 - Financial summaries with revenue categories
@@ -339,7 +340,7 @@ This creates a learning loop: each decision becomes training data for model impr
 | OTA Channels | Booking.com (XML) + SiteMinder (REST) | Direct + aggregated OTA connectivity |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (605 tests) | Unit and integration tests |
+| Testing | Vitest (624 tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -404,7 +405,7 @@ This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a singl
 ### Run tests
 
 ```bash
-# All tests (605 tests across 50 test files)
+# All tests (624 tests across 51 test files)
 pnpm test
 
 # API tests only
@@ -845,7 +846,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (605 tests, 50 files)
+pnpm test             # Run all tests (624 tests, 51 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```

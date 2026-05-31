@@ -5,6 +5,22 @@ All notable changes to HAIP are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Added — AI Intelligence Layer (accounting)
+
+AI on top of the new accounting layer — a differentiator with no equivalent in
+the baseline feature set. HAIP now ships **10 built-in agents** (was 9).
+
+- **A/R Collections Prioritization agent** (new agent type `ar_collections`) —
+  ranks open Accounts Receivable ledgers by collection priority (balance × days
+  overdue beyond terms × open-transfer count) into low/medium/high tiers with a
+  recommended action.
+- **Cash-variance anomaly detection** — the Night Audit Anomaly agent now scans
+  closed cashier shifts and flags over/short drawer variances
+  (`cash_variance_outlier`, 11 anomaly types total).
+- **Deposit-forfeit risk scoring** — the Cancellation Prediction agent now scores
+  held deposits as likely-forfeit vs. likely-refund with exposure amounts
+  (additive `depositRisk` on each reservation score).
+
 ### Added — Accounting & Cashiering
 
 A new accounting layer that makes HAIP's financials correct-by-construction,
@@ -34,8 +50,9 @@ not just functional.
 - API surface grew to ~125 endpoints (+27: 20 accounting, 7 cashier, plus the
   trial-balance report).
 - Webhook catalog grew to **48 event types** (+11 accounting events).
-- Test suite: **605 tests across 50 files** (was 551 across 45), all passing —
-  23 new tests (deposit 8, A/R 8, cashier 7).
+- Test suite: **624 tests across 51 files** (was 551 across 45), all passing —
+  42 new tests (deposit 8, A/R 8, cashier 7, A/R-collections models 11, plus
+  cash-variance and deposit-risk model tests).
 
 ### Notes
 - All new property-scoped tables enforce `property_id` multi-tenancy: every
