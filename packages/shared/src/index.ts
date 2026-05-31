@@ -90,6 +90,14 @@ export const WEBHOOK_EVENTS = {
 
   // Payment correction matrix (KB 14.1)
   'payment.corrected': 'payment.corrected',
+
+  // Groups & Allotment Engine (KB 14.3–14.7)
+  'group.profile_created': 'group.profile_created',
+  'group.block_created': 'group.block_created',
+  'group.inventory_set': 'group.inventory_set',
+  'group.block_released': 'group.block_released',
+  'group.rooming_list_imported': 'group.rooming_list_imported',
+  'group.reservation_linked': 'group.reservation_linked',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;

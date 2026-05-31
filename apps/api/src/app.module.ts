@@ -25,6 +25,7 @@ import { AgentModule } from './modules/agent/agent.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { CashierModule } from './modules/cashier/cashier.module';
 import { HouseAccountModule } from './modules/house-account/house-account.module';
+import { GroupsModule } from './modules/groups/groups.module';
 
 const imports: any[] = [
   ConfigModule.forRoot({
@@ -54,6 +55,7 @@ const imports: any[] = [
   AccountingModule,
   CashierModule,
   HouseAccountModule,
+  GroupsModule,
 ];
 
 // Serve dashboard static files in production

@@ -83,6 +83,11 @@ export const reservations = pgTable('reservations', {
   // Status
   status: reservationStatusEnum('status').notNull().default('pending'),
 
+  // Group linkage (KB 14.3) — nullable; set when a reservation is a member of a
+  // group profile. FK is enforced at the DB layer via push-schema ALTER to avoid
+  // a circular import (group.ts already references reservations).
+  groupProfileId: uuid('group_profile_id'),
+
   // Rate
   ratePlanId: uuid('rate_plan_id').notNull().references(() => ratePlans.id),
   totalAmount: numeric('total_amount', { precision: 12, scale: 2 }).notNull(),

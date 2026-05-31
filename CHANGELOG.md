@@ -5,6 +5,25 @@ All notable changes to HAIP are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Added — Groups & Allotment Engine
+
+- **Group profiles** for corporate / travel-agent / wholesale / event business,
+  with an optional group (master) folio and computed group invoices.
+- **Allotment blocks** — hold rooms per date and room type at negotiated rates,
+  with cutoff dates, shoulder dates, and Min/Max LOS. Inventory is validated
+  against live availability to prevent over-allotment.
+- **Cutoff & auto-release** — `POST /groups/blocks/:id/release` plus a
+  `POST /groups/blocks/process-cutoffs` sweep that frees unsold rooms from all
+  expired auto-release blocks back to general inventory (endpoint-triggered; no
+  in-process cron, per repo convention).
+- **Pickup tracking** — rooms allotted vs. picked up per date/room-type.
+- **Rooming lists** — batch import that creates and links member reservations
+  with per-row success/error handling.
+- **Group Pickup Forecasting agent** (new agent type `group_pickup`, 11 agents
+  total) — projects final pickup vs. wash and recommends hold / partial-release
+  / full-release ahead of cutoff.
+- New `group.*` webhook events; `reservations.group_profile_id` added.
+
 ### Added — Split Folios & House Accounts
 
 - **House Accounts** — a non-guest ledger for walk-in retail, bar/restaurant,
@@ -66,14 +85,14 @@ not just functional.
   endpoints.
 
 ### Changed
-- API surface grew to ~140 endpoints (+42: 20 accounting, 7 cashier, 11 house
-  accounts/products, 3 split-folio, plus payment-correct and the trial-balance
-  report).
-- Webhook catalog grew to **55 event types** (+18: 11 accounting, 7 house-account
-  & folio).
-- Test suite: **643 tests across 53 files** (was 551 across 45), all passing —
-  61 new tests across the accounting, AI-hook, house-account, split-folio, and
-  payment-correction features.
+- API surface grew to ~155 endpoints (+58: 20 accounting, 7 cashier, 11 house
+  accounts/products, 3 split-folio, 16 groups/allotment, plus payment-correct
+  and the trial-balance report).
+- Webhook catalog grew to **61 event types** (+24: 11 accounting, 7 house-account
+  & folio, 6 groups).
+- Test suite: **672 tests across 57 files** (was 551 across 45), all passing —
+  90 new tests across the accounting, AI-hook, house-account, split-folio,
+  payment-correction, and groups/allotment features.
 
 ### Notes
 - All new property-scoped tables enforce `property_id` multi-tenancy: every

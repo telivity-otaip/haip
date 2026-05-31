@@ -36,10 +36,11 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'tax_rule_type' AND e.enumlabel = 'split_component') THEN ALTER TYPE tax_rule_type ADD VALUE 'split_component'; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_source') THEN CREATE TYPE review_source AS ENUM ('google','tripadvisor','booking_com','expedia','other'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_response_status') THEN CREATE TYPE review_response_status AS ENUM ('pending','drafted','approved','posted'); END IF; END $$`,
-    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_type') THEN CREATE TYPE agent_type AS ENUM ('pricing','demand_forecast','channel_mix','overbooking','night_audit','housekeeping','cancellation','guest_comms','review_response','ar_collections','deposit_risk'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_type') THEN CREATE TYPE agent_type AS ENUM ('pricing','demand_forecast','channel_mix','overbooking','night_audit','housekeeping','cancellation','guest_comms','review_response','ar_collections','deposit_risk','group_pickup'); END IF; END $$`,
     // Idempotent add: append ar_collections / deposit_risk to agent_type if it already existed without them
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'agent_type' AND e.enumlabel = 'ar_collections') THEN ALTER TYPE agent_type ADD VALUE 'ar_collections'; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'agent_type' AND e.enumlabel = 'deposit_risk') THEN ALTER TYPE agent_type ADD VALUE 'deposit_risk'; END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'agent_type' AND e.enumlabel = 'group_pickup') THEN ALTER TYPE agent_type ADD VALUE 'group_pickup'; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_mode') THEN CREATE TYPE agent_mode AS ENUM ('manual','suggest','autopilot'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_decision_status') THEN CREATE TYPE agent_decision_status AS ENUM ('pending','approved','rejected','auto_executed','expired'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'webhook_delivery_status') THEN CREATE TYPE webhook_delivery_status AS ENUM ('pending','delivered','failed'); END IF; END $$`,
@@ -52,6 +53,10 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'house_account_kind') THEN CREATE TYPE house_account_kind AS ENUM ('retail','vendor','internal','other'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'house_account_status') THEN CREATE TYPE house_account_status AS ENUM ('open','closed'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'folio_target_role') THEN CREATE TYPE folio_target_role AS ENUM ('guest','company'); END IF; END $$`,
+    // Groups & Allotment Engine (KB 14.3–14.7)
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'group_type') THEN CREATE TYPE group_type AS ENUM ('corporate','travel_agent','wholesale','event','other'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'block_status') THEN CREATE TYPE block_status AS ENUM ('tentative','definite','released','cancelled'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'rooming_list_entry_status') THEN CREATE TYPE rooming_list_entry_status AS ENUM ('pending','created','error'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -670,6 +675,64 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // Groups & Allotment Engine (KB 14.3–14.7)
+    `CREATE TABLE IF NOT EXISTS group_profiles (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(255) NOT NULL,
+      type group_type NOT NULL DEFAULT 'corporate',
+      contact_name varchar(255),
+      contact_email varchar(255),
+      contact_phone varchar(30),
+      master_folio_id uuid REFERENCES folios(id),
+      notes text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS allotment_blocks (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      group_profile_id uuid NOT NULL REFERENCES group_profiles(id),
+      name varchar(255) NOT NULL,
+      rate_plan_id uuid REFERENCES rate_plans(id),
+      start_date date NOT NULL,
+      end_date date NOT NULL,
+      cutoff_date date,
+      auto_release boolean NOT NULL DEFAULT true,
+      shoulder_start date,
+      shoulder_end date,
+      min_los integer,
+      max_los integer,
+      group_code varchar(50),
+      status block_status NOT NULL DEFAULT 'tentative',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS allotment_block_inventory (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      allotment_block_id uuid NOT NULL REFERENCES allotment_blocks(id),
+      stay_date date NOT NULL,
+      room_type_id uuid NOT NULL REFERENCES room_types(id),
+      rooms_allotted integer NOT NULL DEFAULT 0,
+      rooms_picked_up integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS rooming_list_entries (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      allotment_block_id uuid NOT NULL REFERENCES allotment_blocks(id),
+      guest_name varchar(255) NOT NULL,
+      arrival date,
+      departure date,
+      room_type_id uuid REFERENCES room_types(id),
+      reservation_id uuid REFERENCES reservations(id),
+      status rooming_list_entry_status NOT NULL DEFAULT 'pending',
+      error_note text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
   ];
 
   for (const t of tables) {
@@ -685,6 +748,10 @@ async function main() {
     `ALTER TABLE charges ADD COLUMN IF NOT EXISTS house_account_id uuid`,
     `ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS house_account_id uuid`,
+    // Group linkage on reservations (KB 14.3) — added via ALTER to avoid a
+    // circular FK at table-create time (group_profiles references nothing of
+    // reservations, but reservations is created before group_profiles).
+    `ALTER TABLE reservations ADD COLUMN IF NOT EXISTS group_profile_id uuid`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));

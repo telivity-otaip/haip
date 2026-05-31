@@ -136,3 +136,14 @@ export {
   folioTargetRoleEnum,
   folioRoutingRules,
 } from './folio-routing.js';
+
+// Groups & Allotment Engine (KB 14.3–14.7)
+export {
+  groupTypeEnum,
+  blockStatusEnum,
+  roomingListEntryStatusEnum,
+  groupProfiles,
+  allotmentBlocks,
+  allotmentBlockInventory,
+  roomingListEntries,
+} from './group.js';
