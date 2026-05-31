@@ -207,6 +207,11 @@ This creates a learning loop: each decision becomes training data for model impr
 - Folio settlement and close workflows
 - Charge locking for night audit
 
+### Split Folios & House Accounts
+- **Split folio** — multiple folios per reservation with config-driven routing rules (e.g. room & tax → company folio, incidentals → guest folio) and the ability to move transactions between folios individually or by charge type (night-audit-locked charges are protected).
+- **House accounts** — a non-guest ledger for walk-in retail, bar/restaurant, vendor, or internal sales not tied to any reservation. Open/close lifecycle, a product catalog for retail sales, and charge/payment posting on the same unified ledger as folios (keeps room vs. non-room revenue distinct in reports).
+- **Correction matrix** — a payment-state-aware correction policy that picks the safe operation automatically: **void** uncaptured authorizations (and same-day cash), **refund** captured card payments, or post a compensating **adjustment** when neither applies. Illegal overrides (e.g. voiding a captured card) are rejected.
+
 ### Accounting & Cashiering
 - **Deposit Ledger** — advance deposits tracked as a liability (not revenue) with a full recognition lifecycle: `held → applied` (at check-in/checkout), `refunded`, or `forfeited`. Refundable vs. non-refundable handling, with status-transition guards.
 - **Accounts Receivable** — named A/R ledgers for post-stay direct billing; transfer an outstanding folio balance to A/R (zeroing the folio), record A/R payments, reverse transfers with a preserved audit trail, and aging buckets (0–30 / 31–60 / 61–90 / 90+).
@@ -300,7 +305,7 @@ This creates a learning loop: each decision becomes training data for model impr
 
 ### Webhook Engine
 - Real-time webhook delivery on every entity state change
-- 48 event types including accounting events (`deposit.received`, `deposit.applied`, `ar.transfer_created`, `cashdrawer.session_closed`) and AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
+- 55 event types including accounting events (`deposit.received`, `ar.transfer_created`, `cashdrawer.session_closed`), house-account & folio events (`houseaccount.opened`, `folio.transactions_moved`, `payment.corrected`), and AI agent events (`agent.decision_made`, `agent.cancellation_forecast_updated`, `guest.communication_drafted`, `guest.review_response_drafted`)
 - Event format: `entity.action` (e.g., `reservation.created`, `housekeeping.task_completed`)
 - Subscription management for external consumers
 
@@ -340,7 +345,7 @@ This creates a learning loop: each decision becomes training data for model impr
 | OTA Channels | Booking.com (XML) + SiteMinder (REST) | Direct + aggregated OTA connectivity |
 | XML Processing | fast-xml-parser | Booking.com OTA XML protocol |
 | Package Manager | pnpm workspaces | Monorepo management |
-| Testing | Vitest (624 tests) | Unit and integration tests |
+| Testing | Vitest (643 tests) | Unit and integration tests |
 | Build | tsup (packages) + Vite (dashboard) + nest build (API) | Fast builds |
 | Containers | Docker + docker-compose | Local dev and production deployment |
 | CI/CD | GitHub Actions | Automated testing, builds, and releases |
@@ -405,7 +410,7 @@ This starts PostgreSQL, Redis, Keycloak, and the HAIP API + Dashboard in a singl
 ### Run tests
 
 ```bash
-# All tests (624 tests across 51 test files)
+# All tests (643 tests across 53 test files)
 pnpm test
 
 # API tests only
@@ -510,7 +515,7 @@ haip/
 
 All endpoints are prefixed with `/api/v1/` and documented via OpenAPI 3.0. Run the API and visit `http://localhost:3000/docs` for the interactive Swagger UI.
 
-### Core Endpoints (~125 total)
+### Core Endpoints (~140 total)
 
 <details>
 <summary><strong>AI Agents</strong> — 11 endpoints</summary>
@@ -566,6 +571,27 @@ POST   /api/v1/folios/:id/charges/:chargeId/reverse # Reverse charge
 POST   /api/v1/folios/:id/charges/lock             # Lock charges
 POST   /api/v1/folios/:id/transfer-charge          # Transfer charge
 POST   /api/v1/folios/:id/transfer-to-city-ledger  # Transfer to city ledger
+POST   /api/v1/folios/routing-rules                # Create a split-folio routing rule
+GET    /api/v1/folios/routing-rules                # List routing rules (by reservation)
+POST   /api/v1/folios/:id/move-transactions        # Move charges between folios
+```
+</details>
+
+<details>
+<summary><strong>House Accounts & Products</strong> — 11 endpoints</summary>
+
+```
+POST   /api/v1/products                            # Create retail product
+GET    /api/v1/products                            # List products
+GET    /api/v1/products/:id                         # Get product
+PATCH  /api/v1/products/:id                         # Update product
+POST   /api/v1/house-accounts                      # Open a house account
+GET    /api/v1/house-accounts                      # List house accounts
+GET    /api/v1/house-accounts/:id                   # Get house account
+POST   /api/v1/house-accounts/:id/close            # Close house account
+POST   /api/v1/house-accounts/:id/charges          # Post a charge
+POST   /api/v1/house-accounts/:id/payments         # Record a payment
+POST   /api/v1/house-accounts/:id/sell             # Sell a product (retail)
 ```
 </details>
 
@@ -712,9 +738,11 @@ GET    /api/v1/payments/:id                        # Get payment
 POST   /api/v1/payments/:id/capture                # Capture authorized
 POST   /api/v1/payments/:id/void                   # Void payment
 POST   /api/v1/payments/:id/refund                 # Refund payment
+POST   /api/v1/payments/:id/correct                # Correct payment (void/refund/adjust)
 
-# Reports — 4 endpoints
+# Reports — 5 endpoints
 GET    /api/v1/reports/daily-revenue               # Daily revenue report
+GET    /api/v1/reports/trial-balance               # Daily trial balance (deposit/guest/A-R)
 GET    /api/v1/reports/occupancy                   # Occupancy report
 GET    /api/v1/reports/financial-summary            # Financial summary
 GET    /api/v1/reports/occupancy-trend              # Occupancy trend
@@ -846,7 +874,7 @@ HAIP is built in public and contributions are welcome.
 pnpm install          # Install dependencies
 pnpm build            # Build all workspace packages
 pnpm dev              # Start API in dev mode (hot reload)
-pnpm test             # Run all tests (624 tests, 51 files)
+pnpm test             # Run all tests (643 tests, 53 files)
 pnpm typecheck        # TypeScript strict check
 pnpm lint             # ESLint
 ```

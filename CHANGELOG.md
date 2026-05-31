@@ -5,6 +5,25 @@ All notable changes to HAIP are documented here. This project adheres to
 
 ## [Unreleased]
 
+### Added — Split Folios & House Accounts
+
+- **House Accounts** — a non-guest ledger for walk-in retail, bar/restaurant,
+  vendor, or internal sales not tied to any reservation. Open/close lifecycle,
+  a `products` retail catalog, and charge/payment posting on the same unified
+  ledger as folios. New `/house-accounts` + `/products` endpoints and
+  `houseaccount.*` webhook events.
+- **Split Folio** — multiple folios per reservation with config-driven routing
+  rules (room & tax → company, incidentals → guest) and move-transactions
+  between folios (individually or by charge type; night-audit-locked charges are
+  protected). New `/folios/routing-rules` and `/folios/:id/move-transactions`
+  endpoints.
+- **Payment Correction Matrix** — `POST /payments/:id/correct` picks the safe
+  operation by payment state: **void** uncaptured authorizations (and same-day
+  cash), **refund** captured cards, or post a compensating **adjustment**.
+  Illegal overrides (e.g. voiding a captured card) are rejected.
+- Schema: `charges`/`payments` now belong to **either** a folio **or** a house
+  account (`folio_id` nullable + nullable `house_account_id`).
+
 ### Added — AI Intelligence Layer (accounting)
 
 AI on top of the new accounting layer — a differentiator with no equivalent in
@@ -47,12 +66,14 @@ not just functional.
   endpoints.
 
 ### Changed
-- API surface grew to ~125 endpoints (+27: 20 accounting, 7 cashier, plus the
-  trial-balance report).
-- Webhook catalog grew to **48 event types** (+11 accounting events).
-- Test suite: **624 tests across 51 files** (was 551 across 45), all passing —
-  42 new tests (deposit 8, A/R 8, cashier 7, A/R-collections models 11, plus
-  cash-variance and deposit-risk model tests).
+- API surface grew to ~140 endpoints (+42: 20 accounting, 7 cashier, 11 house
+  accounts/products, 3 split-folio, plus payment-correct and the trial-balance
+  report).
+- Webhook catalog grew to **55 event types** (+18: 11 accounting, 7 house-account
+  & folio).
+- Test suite: **643 tests across 53 files** (was 551 across 45), all passing —
+  61 new tests across the accounting, AI-hook, house-account, split-folio, and
+  payment-correction features.
 
 ### Notes
 - All new property-scoped tables enforce `property_id` multi-tenancy: every

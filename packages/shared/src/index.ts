@@ -77,6 +77,19 @@ export const WEBHOOK_EVENTS = {
   'cashdrawer.session_opened': 'cashdrawer.session_opened',
   'cashdrawer.movement_recorded': 'cashdrawer.movement_recorded',
   'cashdrawer.session_closed': 'cashdrawer.session_closed',
+
+  // House account events (KB 13)
+  'houseaccount.opened': 'houseaccount.opened',
+  'houseaccount.closed': 'houseaccount.closed',
+  'houseaccount.charge_posted': 'houseaccount.charge_posted',
+  'houseaccount.payment_recorded': 'houseaccount.payment_recorded',
+
+  // Split-folio events (KB 14.2)
+  'folio.transactions_moved': 'folio.transactions_moved',
+  'folio.routing_rule_created': 'folio.routing_rule_created',
+
+  // Payment correction matrix (KB 14.1)
+  'payment.corrected': 'payment.corrected',
 } as const;
 
 export type WebhookEvent = keyof typeof WEBHOOK_EVENTS;

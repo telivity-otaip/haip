@@ -122,3 +122,17 @@ export {
   accountingCodeKindEnum,
   accountingCodes,
 } from './accounting-code.js';
+
+// House Accounts & Products (KB 13)
+export {
+  houseAccountKindEnum,
+  houseAccountStatusEnum,
+  houseAccounts,
+  products,
+} from './house-account.js';
+
+// Split-folio routing rules (KB 14.2)
+export {
+  folioTargetRoleEnum,
+  folioRoutingRules,
+} from './folio-routing.js';

@@ -49,6 +49,9 @@ async function main() {
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cash_session_status') THEN CREATE TYPE cash_session_status AS ENUM ('open','closed'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'cash_movement_type') THEN CREATE TYPE cash_movement_type AS ENUM ('payment','refund','paid_out','drop'); END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'accounting_code_kind') THEN CREATE TYPE accounting_code_kind AS ENUM ('transaction','gl'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'house_account_kind') THEN CREATE TYPE house_account_kind AS ENUM ('retail','vendor','internal','other'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'house_account_status') THEN CREATE TYPE house_account_status AS ENUM ('open','closed'); END IF; END $$`,
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'folio_target_role') THEN CREATE TYPE folio_target_role AS ENUM ('guest','company'); END IF; END $$`,
   ];
 
   for (const e of enums) {
@@ -625,6 +628,48 @@ async function main() {
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )`,
+    // house_accounts (KB 13) — property-scoped ledger, NO reservation/guest link
+    `CREATE TABLE IF NOT EXISTS house_accounts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      name varchar(255) NOT NULL,
+      kind house_account_kind NOT NULL DEFAULT 'retail',
+      status house_account_status NOT NULL DEFAULT 'open',
+      balance numeric(12,2) NOT NULL DEFAULT 0,
+      total_charges numeric(12,2) NOT NULL DEFAULT 0,
+      total_payments numeric(12,2) NOT NULL DEFAULT 0,
+      currency_code varchar(3) NOT NULL,
+      notes text,
+      opened_by uuid,
+      opened_at timestamptz NOT NULL DEFAULT now(),
+      closed_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // products (KB 13.3) — retail / item catalog
+    `CREATE TABLE IF NOT EXISTS products (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      category varchar(100),
+      name varchar(255) NOT NULL,
+      price numeric(12,2) NOT NULL,
+      currency_code varchar(3) NOT NULL,
+      tax_code varchar(20),
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+    // folio_routing_rules (KB 14.2)
+    `CREATE TABLE IF NOT EXISTS folio_routing_rules (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      property_id uuid NOT NULL REFERENCES properties(id),
+      reservation_id uuid NOT NULL REFERENCES reservations(id),
+      charge_type charge_type NOT NULL,
+      target_folio_id uuid NOT NULL REFERENCES folios(id),
+      priority integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
   ];
 
   for (const t of tables) {
@@ -634,6 +679,12 @@ async function main() {
   // Idempotent column additions for pre-existing databases
   const alters = [
     `ALTER TABLE tax_rules ADD COLUMN IF NOT EXISTS split_percentage numeric(5,2)`,
+    // House accounts reuse charges/payments (KB 13): folio_id becomes nullable,
+    // add house_account_id. A row belongs to EITHER a folio OR a house account.
+    `ALTER TABLE charges ALTER COLUMN folio_id DROP NOT NULL`,
+    `ALTER TABLE charges ADD COLUMN IF NOT EXISTS house_account_id uuid`,
+    `ALTER TABLE payments ALTER COLUMN folio_id DROP NOT NULL`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS house_account_id uuid`,
   ];
   for (const a of alters) {
     await db.execute(sql.raw(a));
